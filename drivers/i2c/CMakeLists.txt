@@ -25,6 +25,49 @@ zephyr_library_sources_ifdef(CONFIG_I2C_LPC11U6X        i2c_lpc11u6x.c)
 zephyr_library_sources_ifdef(CONFIG_I2C_XEC		i2c_mchp_xec.c)
 zephyr_library_sources_ifdef(CONFIG_I2C_MCUX		i2c_mcux.c)
 zephyr_library_sources_ifdef(CONFIG_I2C_MCUX_FLEXCOMM	i2c_mcux_flexcomm.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_NIOS2		i2c_nios2.c)
+
+zephyr_library_sources_ifdef(CONFIG_I2C_NPCX_DMA_DRIVEN
+	i2c_npcx_controller.c
+	i2c_npcx_controller_dma.c
+	i2c_npcx_port.c
+	)
+zephyr_library_sources_ifdef(CONFIG_I2C_NPCX_FIFO_DRIVEN
+	i2c_npcx_controller.c
+	i2c_npcx_controller_fifo.c
+	i2c_npcx_port.c
+	)
+
+zephyr_library_sources_ifdef(CONFIG_I2C_NRFX_TWIS	i2c_nrfx_twis.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_NUMAKER		i2c_numaker.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_NXP_II2C	i2c_nxp_ii2c.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_OMAP		i2c_omap.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RCAR		i2c_rcar.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RENESAS_RA_IIC	i2c_renesas_ra_iic.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RENESAS_RA_SCI	i2c_renesas_ra_sci.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RENESAS_RA_SCI_B	i2c_renesas_ra_sci_b.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RENESAS_RX_RIIC i2c_renesas_rx_riic.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RENESAS_RZ_IIC i2c_renesas_rz_riic.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RENESAS_RZ_RIIC i2c_renesas_rz_riic.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RTS5912		i2c_realtek_rts5912.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_RV32M1_LPI2C	i2c_rv32m1_lpi2c.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SAM0		i2c_sam0.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SAM_TWI		i2c_sam_twi.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SAM_TWIM	i2c_sam4l_twim.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SBCON		i2c_sbcon.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SC18IM704	i2c_sc18im704.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SEDI		i2c_sedi.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SIFIVE		i2c_sifive.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SILABS		i2c_silabs.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SMARTBOND	i2c_smartbond.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_SY1XX		i2c_sy1xx.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_TCA954X		i2c_tca954x.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_TELINK_B91	i2c_b91.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_WCH		i2c_wch.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_XEC		i2c_mchp_xec.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_XEC_V2		i2c_mchp_xec_v2.c)
+zephyr_library_sources_ifdef(CONFIG_I2C_XILINX_AXI	i2c_xilinx_axi.c)
+# zephyr-keep-sorted-stop
 
 if(CONFIG_I2C_RTIO)
   zephyr_library_sources_ifdef(CONFIG_I2C_MCUX_LPI2C	i2c_mcux_lpi2c_rtio.c)
