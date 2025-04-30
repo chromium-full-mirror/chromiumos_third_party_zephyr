@@ -11,3 +11,21 @@ config I2C_NPCX
 	  This option enables the I2C driver for NPCX family of
 	  processors.
 	  Say y if you wish to use I2C modules on NPCX MCU.
+
+config I2C_NPCX_FIFO_DRIVEN
+	bool
+	default y
+	depends on !DT_HAS_NUVOTON_NPCX_I2C_PORT_DMA_DRIVEN
+	depends on I2C_NPCX
+	help
+	  For I2C peripherals that support FIFO mode, data transfers shall be performed
+	  using FIFO‑driven transactions.
+
+config I2C_NPCX_DMA_DRIVEN
+	bool
+	default y
+	depends on DT_HAS_NUVOTON_NPCX_I2C_PORT_DMA_DRIVEN
+	depends on I2C_NPCX
+	help
+	  For I2C peripherals that support DMA mode, data transfers shall be performed
+	  using DMA‑driven transactions.
