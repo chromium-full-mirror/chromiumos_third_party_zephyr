@@ -1,7 +1,4 @@
-.. _mimxrt1064_evk:
-
-NXP MIMXRT1064-EVK
-##################
+.. zephyr:board:: mimxrt1064_evk
 
 Overview
 ********
@@ -13,10 +10,6 @@ compatibility with i.MX RT1050. This series introduces additional features
 ideal for real-time applications such as High-Speed GPIO, CAN FD, and
 synchronous parallel NAND/NOR/PSRAM controller. The i.MX RT1064 runs on the
 Arm® Cortex-M7® core up to 600 MHz.
-
-.. image:: mimxrt1064_evk.jpg
-   :align: center
-   :alt: MIMXRT1064-EVK
 
 Hardware
 ********
@@ -101,62 +94,9 @@ Supported Features
 NXP considers the MIMXRT1064-EVK as the superset board for the i.MX RT10xx
 family of MCUs.  This board is a focus for NXP's Full Platform Support for
 Zephyr, to better enable the entire RT10xx family.  NXP prioritizes enabling
-this board with new support for Zephyr features.  The mimxrt1064_evk board
-configuration supports the following hardware features:
+this board with new support for Zephyr features.
 
-+-----------+------------+-------------------------------------+
-| Interface | Controller | Driver/Component                    |
-+===========+============+=====================================+
-| NVIC      | on-chip    | nested vector interrupt controller  |
-+-----------+------------+-------------------------------------+
-| SYSTICK   | on-chip    | systick                             |
-+-----------+------------+-------------------------------------+
-| DISPLAY   | on-chip    | eLCDIF. Tested with                 |
-|           |            | :ref:`rk043fn02h_ct`, and           |
-|           |            | :ref:`rk043fn66hs_ctg` shields      |
-+-----------+------------+-------------------------------------+
-| VIDEO     | on-chip    | video, using CSI                    |
-+-----------+------------+-------------------------------------+
-| FLASH     | on-chip    | QSPI flash                          |
-+-----------+------------+-------------------------------------+
-| GPIO      | on-chip    | gpio                                |
-+-----------+------------+-------------------------------------+
-| I2C       | on-chip    | i2c                                 |
-+-----------+------------+-------------------------------------+
-| WATCHDOG  | on-chip    | watchdog                            |
-+-----------+------------+-------------------------------------+
-| PWM       | on-chip    | pwm                                 |
-+-----------+------------+-------------------------------------+
-| SDHC      | on-chip    | disk access                         |
-+-----------+------------+-------------------------------------+
-| UART      | on-chip    | serial port-polling;                |
-|           |            | serial port-interrupt               |
-+-----------+------------+-------------------------------------+
-| ADC       | on-chip    | adc                                 |
-+-----------+------------+-------------------------------------+
-| ENET      | on-chip    | ethernet                            |
-+-----------+------------+-------------------------------------+
-| USB       | on-chip    | USB device                          |
-+-----------+------------+-------------------------------------+
-| CAN       | on-chip    | can                                 |
-+-----------+------------+-------------------------------------+
-| SPI       | on-chip    | spi                                 |
-+-----------+------------+-------------------------------------+
-| GPT       | on-chip    | gpt                                 |
-+-----------+------------+-------------------------------------+
-| DMA       | on-chip    | dma                                 |
-+-----------+------------+-------------------------------------+
-| HWINFO    | on-chip    | Unique device serial number         |
-+-----------+------------+-------------------------------------+
-| TRNG      | on-chip    | entropy                             |
-+-----------+------------+-------------------------------------+
-| FLEXSPI   | on-chip    | flash programming                   |
-+-----------+------------+-------------------------------------+
-
-The default configuration can be found in
-:zephyr_file:`boards/nxp/mimxrt1064_evk/mimxrt1064_evk_defconfig`
-
-Other hardware features are not currently supported by the port.
+.. zephyr:board-supported-hw::
 
 Connections and I/Os
 ====================
@@ -317,6 +257,8 @@ and the remaining are not used.
 Programming and Debugging
 *************************
 
+.. zephyr:board-supported-runners::
+
 This board supports 3 debug host tools. Please install your preferred host
 tool, then follow the instructions in `Configuring a Debug Probe`_ to
 configure the board appropriately.
@@ -373,7 +315,7 @@ SWO frequency of 7500KHz.
 Flashing
 ========
 
-Here is an example for the :ref:`hello_world` application.
+Here is an example for the :zephyr:code-sample:`hello_world` application.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
@@ -391,7 +333,7 @@ see the following message in the terminal:
 Debugging
 =========
 
-Here is an example for the :ref:`hello_world` application.
+Here is an example for the :zephyr:code-sample:`hello_world` application.
 
 .. zephyr-app-commands::
    :zephyr-app: samples/hello_world
@@ -443,6 +385,9 @@ steps:
 If the west flash or debug commands fail, and the command hangs while executing
 runners.jlink, confirm the J-Link debug probe is configured, powered, and
 connected to the EVK properly.
+
+.. include:: ../../common/board-footer.rst
+   :start-after: nxp-board-footer
 
 .. _MIMXRT1064-EVK Website:
    https://www.nxp.com/support/developer-resources/run-time-software/i.mx-developer-resources/mimxrt1064-evk-i.mx-rt1064-evaluation-kit:MIMXRT1064-EVK

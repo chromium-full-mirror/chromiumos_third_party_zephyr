@@ -6,7 +6,7 @@
 
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
-#include <zephyr/net/buf.h>
+#include <zephyr/net_buf.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/__assert.h>
 #include <zephyr/usb/usb_ch9.h>
@@ -78,22 +78,13 @@ struct udc_ep_config *udc_get_ep_cfg(const struct device *dev, const uint8_t ep)
 	return data->ep_lut[USB_EP_LUT_IDX(ep)];
 }
 
-bool udc_ep_is_busy(const struct device *dev, const uint8_t ep)
+bool udc_ep_is_busy(const struct udc_ep_config *const ep_cfg)
 {
-	struct udc_ep_config *ep_cfg;
-
-	ep_cfg = udc_get_ep_cfg(dev, ep);
-	__ASSERT(ep_cfg != NULL, "ep 0x%02x is not available", ep);
-
 	return ep_cfg->stat.busy;
 }
 
-void udc_ep_set_busy(const struct device *dev, const uint8_t ep, const bool busy)
+void udc_ep_set_busy(struct udc_ep_config *const ep_cfg, const bool busy)
 {
-	struct udc_ep_config *ep_cfg;
-
-	ep_cfg = udc_get_ep_cfg(dev, ep);
-	__ASSERT(ep_cfg != NULL, "ep 0x%02x is not available", ep);
 	ep_cfg->stat.busy = busy;
 }
 
@@ -115,34 +106,21 @@ int udc_register_ep(const struct device *dev, struct udc_ep_config *const cfg)
 	return 0;
 }
 
-struct net_buf *udc_buf_get(const struct device *dev, const uint8_t ep)
+struct net_buf *udc_buf_get(struct udc_ep_config *const ep_cfg)
 {
-	struct udc_ep_config *ep_cfg;
-
-	ep_cfg = udc_get_ep_cfg(dev, ep);
-	if (ep_cfg == NULL) {
-		return NULL;
-	}
-
-	return net_buf_get(&ep_cfg->fifo, K_NO_WAIT);
+	return k_fifo_get(&ep_cfg->fifo, K_NO_WAIT);
 }
 
-struct net_buf *udc_buf_get_all(const struct device *dev, const uint8_t ep)
+struct net_buf *udc_buf_get_all(struct udc_ep_config *const ep_cfg)
 {
-	struct udc_ep_config *ep_cfg;
 	struct net_buf *buf;
-
-	ep_cfg = udc_get_ep_cfg(dev, ep);
-	if (ep_cfg == NULL) {
-		return NULL;
-	}
 
 	buf = k_fifo_get(&ep_cfg->fifo, K_NO_WAIT);
 	if (!buf) {
 		return NULL;
 	}
 
-	LOG_DBG("ep 0x%02x dequeue %p", ep, buf);
+	LOG_DBG("ep 0x%02x dequeue %p", ep_cfg->addr, buf);
 	for (struct net_buf *n = buf; !k_fifo_is_empty(&ep_cfg->fifo); n = n->frags) {
 		n->frags = k_fifo_get(&ep_cfg->fifo, K_NO_WAIT);
 		LOG_DBG("|-> %p ", n->frags);
@@ -154,22 +132,15 @@ struct net_buf *udc_buf_get_all(const struct device *dev, const uint8_t ep)
 	return buf;
 }
 
-struct net_buf *udc_buf_peek(const struct device *dev, const uint8_t ep)
+struct net_buf *udc_buf_peek(struct udc_ep_config *const ep_cfg)
 {
-	struct udc_ep_config *ep_cfg;
-
-	ep_cfg = udc_get_ep_cfg(dev, ep);
-	if (ep_cfg == NULL) {
-		return NULL;
-	}
-
 	return k_fifo_peek_head(&ep_cfg->fifo);
 }
 
 void udc_buf_put(struct udc_ep_config *const ep_cfg,
 		 struct net_buf *const buf)
 {
-	net_buf_put(&ep_cfg->fifo, buf);
+	k_fifo_put(&ep_cfg->fifo, buf);
 }
 
 void udc_ep_buf_set_setup(struct net_buf *const buf)
@@ -262,7 +233,7 @@ static bool ep_check_config(const struct device *dev,
 		return false;
 	}
 
-	if (mps > cfg->caps.mps) {
+	if (USB_MPS_EP_SIZE(mps) > USB_MPS_EP_SIZE(cfg->caps.mps)) {
 		return false;
 	}
 
@@ -273,12 +244,16 @@ static bool ep_check_config(const struct device *dev,
 		}
 		break;
 	case USB_EP_TYPE_INTERRUPT:
-		if (!cfg->caps.interrupt) {
+		if (!cfg->caps.interrupt ||
+		    (USB_MPS_ADDITIONAL_TRANSACTIONS(mps) &&
+		     !cfg->caps.high_bandwidth)) {
 			return false;
 		}
 		break;
 	case USB_EP_TYPE_ISO:
-		if (!cfg->caps.iso) {
+		if (!cfg->caps.iso ||
+		    (USB_MPS_ADDITIONAL_TRANSACTIONS(mps) &&
+		     !cfg->caps.high_bandwidth)) {
 			return false;
 		}
 		break;
@@ -588,6 +563,11 @@ int udc_ep_enqueue(const struct device *dev, struct net_buf *const buf)
 		goto ep_enqueue_error;
 	}
 
+	if (!cfg->stat.enabled) {
+		ret = -ENODEV;
+		goto ep_enqueue_error;
+	}
+
 	LOG_DBG("Queue ep 0x%02x %p len %u", cfg->addr, buf,
 		USB_EP_DIR_IS_IN(cfg->addr) ? buf->len : buf->size);
 
@@ -656,7 +636,6 @@ struct net_buf *udc_ep_buf_alloc(const struct device *dev,
 	}
 
 	bi = udc_get_buf_info(buf);
-	memset(bi, 0, sizeof(struct udc_buf_info));
 	bi->ep = ep;
 	LOG_DBG("Allocate net_buf, ep 0x%02x, size %zd", ep, size);
 

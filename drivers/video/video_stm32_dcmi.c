@@ -7,10 +7,12 @@
 #define DT_DRV_COMPAT st_stm32_dcmi
 
 #include <errno.h>
+
 #include <zephyr/kernel.h>
+#include <zephyr/irq.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/drivers/video.h>
 #include <zephyr/drivers/pinctrl.h>
-#include <zephyr/irq.h>
 #include <zephyr/drivers/clock_control/stm32_clock_control.h>
 #include <zephyr/drivers/clock_control.h>
 #include <zephyr/drivers/dma.h>
@@ -18,10 +20,13 @@
 
 #include <stm32_ll_dma.h>
 
-#include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(video_stm32_dcmi, CONFIG_STM32_DCMI_LOG_LEVEL);
+#include "video_device.h"
 
-K_HEAP_DEFINE(video_stm32_buffer_pool, CONFIG_VIDEO_BUFFER_POOL_SZ_MAX);
+LOG_MODULE_REGISTER(video_stm32_dcmi, CONFIG_VIDEO_LOG_LEVEL);
+
+#if CONFIG_VIDEO_BUFFER_POOL_NUM_MAX < 2
+#error "The minimum required number of buffers for video_stm32 is 2"
+#endif
 
 typedef void (*irq_config_func_t)(const struct device *dev);
 
@@ -42,7 +47,7 @@ struct video_stm32_dcmi_data {
 	uint32_t height;
 	uint32_t width;
 	uint32_t pitch;
-	uint8_t *buffer;
+	struct video_buffer *vbuf;
 };
 
 struct video_stm32_dcmi_config {
@@ -52,22 +57,6 @@ struct video_stm32_dcmi_config {
 	const struct device *sensor_dev;
 	const struct stream dma;
 };
-
-static inline unsigned int video_pix_fmt_bpp(uint32_t pixelformat)
-{
-	switch (pixelformat) {
-	case VIDEO_PIX_FMT_BGGR8:
-	case VIDEO_PIX_FMT_GBRG8:
-	case VIDEO_PIX_FMT_GRBG8:
-	case VIDEO_PIX_FMT_RGGB8:
-		return 1;
-	case VIDEO_PIX_FMT_RGB565:
-	case VIDEO_PIX_FMT_YUYV:
-		return 2;
-	default:
-		return 0;
-	}
-}
 
 void HAL_DCMI_ErrorCallback(DCMI_HandleTypeDef *hdcmi)
 {
@@ -90,7 +79,7 @@ void HAL_DCMI_FrameEventCallback(DCMI_HandleTypeDef *hdcmi)
 	}
 
 	vbuf->timestamp = k_uptime_get_32();
-	memcpy(vbuf->buffer, dev_data->buffer, vbuf->bytesused);
+	memcpy(vbuf->buffer, dev_data->vbuf->buffer, vbuf->bytesused);
 
 	k_fifo_put(&dev_data->fifo_out, vbuf);
 
@@ -213,9 +202,13 @@ static int video_stm32_dcmi_set_fmt(const struct device *dev,
 {
 	const struct video_stm32_dcmi_config *config = dev->config;
 	struct video_stm32_dcmi_data *data = dev->data;
-	unsigned int bpp = video_pix_fmt_bpp(fmt->pixelformat);
+	unsigned int bpp = video_bits_per_pixel(fmt->pixelformat) / BITS_PER_BYTE;
 
-	if (!bpp || ep != VIDEO_EP_OUT) {
+	if (bpp == 0 || (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL)) {
+		return -EINVAL;
+	}
+
+	if ((fmt->pitch * fmt->height) > CONFIG_VIDEO_BUFFER_POOL_SZ_MAX) {
 		return -EINVAL;
 	}
 
@@ -238,7 +231,7 @@ static int video_stm32_dcmi_get_fmt(const struct device *dev,
 	struct video_stm32_dcmi_data *data = dev->data;
 	const struct video_stm32_dcmi_config *config = dev->config;
 
-	if ((fmt == NULL) || (ep != VIDEO_EP_OUT)) {
+	if (fmt == NULL || (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL)) {
 		return -EINVAL;
 	}
 
@@ -255,20 +248,38 @@ static int video_stm32_dcmi_get_fmt(const struct device *dev,
 	return 0;
 }
 
-static int video_stm32_dcmi_stream_start(const struct device *dev)
+static int video_stm32_dcmi_set_stream(const struct device *dev, bool enable)
 {
+	int err;
 	struct video_stm32_dcmi_data *data = dev->data;
 	const struct video_stm32_dcmi_config *config = dev->config;
-	size_t buffer_size = data->pitch * data->height;
 
-	data->buffer = k_heap_alloc(&video_stm32_buffer_pool, buffer_size, K_NO_WAIT);
-	if (data->buffer == NULL) {
-		LOG_ERR("Failed to allocate DCMI buffer for image. Size %d bytes", buffer_size);
+	if (!enable) {
+		if (video_stream_stop(config->sensor_dev)) {
+			return -EIO;
+		}
+
+		err = HAL_DCMI_Stop(&data->hdcmi);
+		if (err != HAL_OK) {
+			LOG_ERR("Failed to stop DCMI");
+			return -EIO;
+		}
+
+		/* Release the video buffer allocated when start streaming */
+		k_fifo_put(&data->fifo_in, data->vbuf);
+
+		return 0;
+	}
+
+	data->vbuf = k_fifo_get(&data->fifo_in, K_NO_WAIT);
+
+	if (data->vbuf == NULL) {
+		LOG_ERR("Failed to dequeue a DCMI buffer.");
 		return -ENOMEM;
 	}
 
-	int err = HAL_DCMI_Start_DMA(&data->hdcmi, DCMI_MODE_CONTINUOUS,
-			(uint32_t)data->buffer, buffer_size / 4);
+	err = HAL_DCMI_Start_DMA(&data->hdcmi, DCMI_MODE_CONTINUOUS,
+			(uint32_t)data->vbuf->buffer, data->vbuf->bytesused / 4);
 	if (err != HAL_OK) {
 		LOG_ERR("Failed to start DCMI DMA");
 		return -EIO;
@@ -281,39 +292,23 @@ static int video_stm32_dcmi_stream_start(const struct device *dev)
 	return 0;
 }
 
-static int video_stm32_dcmi_stream_stop(const struct device *dev)
-{
-	struct video_stm32_dcmi_data *data = dev->data;
-	const struct video_stm32_dcmi_config *config = dev->config;
-	int err;
-
-	if (video_stream_stop(config->sensor_dev)) {
-		return -EIO;
-	}
-
-	/* Release the buffer allocated in stream_start */
-	k_heap_free(&video_stm32_buffer_pool, data->buffer);
-
-	err = HAL_DCMI_Stop(&data->hdcmi);
-	if (err != HAL_OK) {
-		LOG_ERR("Failed to stop DCMI");
-		return -EIO;
-	}
-
-	return 0;
-}
-
 static int video_stm32_dcmi_enqueue(const struct device *dev,
 				  enum video_endpoint_id ep,
 				  struct video_buffer *vbuf)
 {
 	struct video_stm32_dcmi_data *data = dev->data;
+	const uint32_t buffer_size = data->pitch * data->height;
 
-	if (ep != VIDEO_EP_OUT) {
+	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
 		return -EINVAL;
 	}
 
-	vbuf->bytesused = data->pitch * data->height;
+	if (buffer_size > vbuf->size) {
+		return -EINVAL;
+	}
+
+	vbuf->bytesused = buffer_size;
+	vbuf->line_offset = 0;
 
 	k_fifo_put(&data->fifo_in, vbuf);
 
@@ -327,7 +322,7 @@ static int video_stm32_dcmi_dequeue(const struct device *dev,
 {
 	struct video_stm32_dcmi_data *data = dev->data;
 
-	if (ep != VIDEO_EP_OUT) {
+	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
 		return -EINVAL;
 	}
 
@@ -346,9 +341,12 @@ static int video_stm32_dcmi_get_caps(const struct device *dev,
 	const struct video_stm32_dcmi_config *config = dev->config;
 	int ret = -ENODEV;
 
-	if (ep != VIDEO_EP_OUT) {
+	if (ep != VIDEO_EP_OUT && ep != VIDEO_EP_ALL) {
 		return -EINVAL;
 	}
+
+	/* DCMI produces full frames */
+	caps->min_line_count = caps->max_line_count = LINE_COUNT_HEIGHT;
 
 	/* Forward the message to the sensor device */
 	ret = video_get_caps(config->sensor_dev, ep, caps);
@@ -356,11 +354,10 @@ static int video_stm32_dcmi_get_caps(const struct device *dev,
 	return ret;
 }
 
-static const struct video_driver_api video_stm32_dcmi_driver_api = {
+static DEVICE_API(video, video_stm32_dcmi_driver_api) = {
 	.set_format = video_stm32_dcmi_set_fmt,
 	.get_format = video_stm32_dcmi_get_fmt,
-	.stream_start = video_stm32_dcmi_stream_start,
-	.stream_stop = video_stm32_dcmi_stream_stop,
+	.set_stream = video_stm32_dcmi_set_stream,
 	.enqueue = video_stm32_dcmi_enqueue,
 	.dequeue = video_stm32_dcmi_dequeue,
 	.get_caps = video_stm32_dcmi_get_caps,
@@ -439,6 +436,8 @@ static struct video_stm32_dcmi_data video_stm32_dcmi_data_0 = {
 	},
 };
 
+#define SOURCE_DEV(n) DEVICE_DT_GET(DT_INST_PHANDLE(n, sensor))
+
 static const struct video_stm32_dcmi_config video_stm32_dcmi_config_0 = {
 	.pclken = {
 		.enr = DT_INST_CLOCKS_CELL(0, bits),
@@ -446,7 +445,7 @@ static const struct video_stm32_dcmi_config video_stm32_dcmi_config_0 = {
 	},
 	.irq_config = video_stm32_dcmi_irq_config_func,
 	.pctrl = PINCTRL_DT_INST_DEV_CONFIG_GET(0),
-	.sensor_dev = DEVICE_DT_GET(DT_INST_PHANDLE(0, sensor)),
+	.sensor_dev = SOURCE_DEV(0),
 	DCMI_DMA_CHANNEL(0, PERIPHERAL, MEMORY)
 };
 
@@ -502,3 +501,5 @@ DEVICE_DT_INST_DEFINE(0, &video_stm32_dcmi_init,
 		    &video_stm32_dcmi_config_0,
 		    POST_KERNEL, CONFIG_VIDEO_INIT_PRIORITY,
 		    &video_stm32_dcmi_driver_api);
+
+VIDEO_DEVICE_DEFINE(dcmi, DEVICE_DT_INST_GET(0), SOURCE_DEV(0));

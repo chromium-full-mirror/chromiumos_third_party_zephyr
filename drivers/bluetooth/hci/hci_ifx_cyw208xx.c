@@ -84,13 +84,15 @@ enum {
 	BT_HCI_VND_OP_WRITE_RAM = 0xFC4C,
 	BT_HCI_VND_OP_LAUNCH_RAM = 0xFC4E,
 	BT_HCI_VND_OP_UPDATE_BAUDRATE = 0xFC18,
+	BT_HCI_VND_OP_SET_LOCAL_DEV_ADDR = 0xFC01,
 };
 
 /* Externs for CY43xxx controller FW */
 extern const uint8_t brcm_patchram_buf[];
 extern const int brcm_patch_ram_length;
 
-#define CYBSP_BT_PLATFORM_CFG_SLEEP_MODE_LP_ENABLED   (1)
+#define CYBSP_BT_PLATFORM_CFG_SLEEP_MODE_LP_ENABLED (0)
+#define BTM_SET_LOCAL_DEV_ADDR_LENGTH 6
 
 static K_SEM_DEFINE(hci_sem, 1, 1);
 static K_SEM_DEFINE(cybt_platform_task_init_sem, 0, 1);
@@ -168,8 +170,9 @@ static int cyw208xx_bt_firmware_download(const uint8_t *firmware_image, uint32_t
 static int cyw208xx_setup(const struct device *dev, const struct bt_hci_setup_params *params)
 {
 	ARG_UNUSED(dev);
-	ARG_UNUSED(params);
+
 	int err;
+	struct net_buf *buf;
 
 	/* Send HCI_RESET */
 	err = bt_hci_cmd_send_sync(BT_HCI_OP_RESET, NULL, NULL);
@@ -185,6 +188,36 @@ static int cyw208xx_setup(const struct device *dev, const struct bt_hci_setup_pa
 
 	/* Waiting when BLE up after firmware launch */
 	cybt_platform_hci_wait_for_boot_fully_up(false);
+
+	/* Set public address */
+	buf = bt_hci_cmd_create(BT_HCI_VND_OP_SET_LOCAL_DEV_ADDR, BTM_SET_LOCAL_DEV_ADDR_LENGTH);
+	if (buf == NULL) {
+		LOG_ERR("Unable to allocate command buffer");
+		return -ENOMEM;
+	}
+
+	bt_addr_t *data = net_buf_add(buf, BTM_SET_LOCAL_DEV_ADDR_LENGTH);
+
+	bt_addr_copy(data, &(params->public_addr));
+
+	/* NOTE: By default, the CYW208xx controller sets some hard-coded static address.
+	 * To avoid address duplication, let's always override the default address by using
+	 * the HCI command BT_HCI_VND_OP_SET_LOCAL_DEV_ADDR. So
+	 *
+	 * 1. when cyw208xx_setup gets BT_ADDR_ANY from the host, it will overwrite the
+	 *    default address, and the host will switch to using a random address (set in
+	 *    the hci_init function).
+	 *
+	 * 2. If user set the static address (by using bt_id_create) before bt_enable,
+	 *    cyw208xx_setup will set user defined static address.
+	 */
+
+	err = bt_hci_cmd_send_sync(BT_HCI_VND_OP_SET_LOCAL_DEV_ADDR, buf, NULL);
+	if (err) {
+		LOG_ERR("Failed to set public address (%d)", err);
+		return err;
+	}
+
 	return 0;
 }
 
@@ -224,32 +257,36 @@ static int cyw208xx_close(const struct device *dev)
 
 static int cyw208xx_send(const struct device *dev, struct net_buf *buf)
 {
+	uint8_t type;
+
 	ARG_UNUSED(dev);
 
 	int ret = 0;
 
 	k_sem_take(&hci_sem, K_FOREVER);
 
-	LOG_DBG("buf %p type %u len %u", buf, bt_buf_get_type(buf), buf->len);
+	type = net_buf_pull_u8(buf);
 
-	switch (bt_buf_get_type(buf)) {
-	case BT_BUF_ACL_OUT:
+	LOG_DBG("buf %p type %u len %u", buf, type, buf->len);
+
+	switch (type) {
+	case BT_HCI_H4_ACL:
 		uint8_t *bt_msg = host_stack_get_acl_to_lower_buffer(BT_TRANSPORT_LE, buf->len);
 
 		memcpy(bt_msg, buf->data, buf->len);
 		ret = host_stack_send_acl_to_lower(BT_TRANSPORT_LE, bt_msg, buf->len);
 		break;
 
-	case BT_BUF_CMD:
+	case BT_HCI_H4_CMD:
 		ret = host_stack_send_cmd_to_lower(buf->data, buf->len);
 		break;
 
-	case BT_BUF_ISO_OUT:
+	case BT_HCI_H4_ISO:
 		ret = host_stack_send_iso_to_lower(buf->data, buf->len);
 		break;
 
 	default:
-		LOG_ERR("Unknown type %u", bt_buf_get_type(buf));
+		LOG_ERR("Unknown type %u", type);
 		ret = EIO;
 		goto done;
 	}
@@ -266,7 +303,7 @@ done:
 	return ret ? -EIO : 0;
 }
 
-static const struct bt_hci_driver_api drv = {
+static DEVICE_API(bt_hci, drv) = {
 	.open = cyw208xx_open,
 	.close = cyw208xx_close,
 	.send = cyw208xx_send,
@@ -343,7 +380,6 @@ void wiced_bt_process_hci(hci_packet_type_t pti, uint8_t *data, uint32_t length)
 			LOG_ERR("Failed to allocate the buffer for RX: ACL ");
 			return;
 		}
-		bt_buf_set_type(buf, BT_BUF_ACL_IN);
 		break;
 
 	case HCI_PACKET_TYPE_SCO:

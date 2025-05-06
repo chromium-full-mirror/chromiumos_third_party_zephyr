@@ -18,16 +18,18 @@ from twisterlib.platform import Platform
 def testinstance() -> TestInstance:
     testsuite = TestSuite('.', 'samples/hello', 'unit.test')
     testsuite.harness_config = {}
+    testsuite.harness = 'pytest'
     testsuite.ignore_faults = False
     testsuite.sysbuild = False
     platform = Platform()
 
-    testinstance = TestInstance(testsuite, platform, 'outdir')
+    testinstance = TestInstance(testsuite, platform, 'zephyr', 'outdir')
     testinstance.handler = mock.Mock()
     testinstance.handler.options = mock.Mock()
     testinstance.handler.options.verbose = 1
     testinstance.handler.options.fixture = ['fixture1:option1', 'fixture2']
     testinstance.handler.options.pytest_args = None
+    testinstance.handler.options.extra_test_args = []
     testinstance.handler.type_str = 'native'
     return testinstance
 
@@ -72,9 +74,18 @@ def test_pytest_command_extra_args(testinstance: TestInstance):
         assert c in command
 
 
+def test_pytest_command_extra_test_args(testinstance: TestInstance):
+    pytest_harness = Pytest()
+    extra_test_args = ['-stop_at=3', '-no-rt']
+    testinstance.handler.options.extra_test_args = extra_test_args
+    pytest_harness.configure(testinstance)
+    command = pytest_harness.generate_command()
+    assert f'--extra-test-args={extra_test_args[0]} {extra_test_args[1]}' in command
+
+
 def test_pytest_command_extra_args_in_options(testinstance: TestInstance):
     pytest_harness = Pytest()
-    pytest_args_from_yaml = '-k test_from_yaml'
+    pytest_args_from_yaml = '--extra-option'
     pytest_args_from_cmd = ['-k', 'test_from_cmd']
     testinstance.testsuite.harness_config['pytest_args'] = [pytest_args_from_yaml]
     testinstance.handler.options.pytest_args = pytest_args_from_cmd
@@ -82,7 +93,8 @@ def test_pytest_command_extra_args_in_options(testinstance: TestInstance):
     command = pytest_harness.generate_command()
     assert pytest_args_from_cmd[0] in command
     assert pytest_args_from_cmd[1] in command
-    assert pytest_args_from_yaml not in command
+    assert pytest_args_from_yaml in command
+    assert command.index(pytest_args_from_yaml) < command.index(pytest_args_from_cmd[1])
 
 
 @pytest.mark.parametrize(

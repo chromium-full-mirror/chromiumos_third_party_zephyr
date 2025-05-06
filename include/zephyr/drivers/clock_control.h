@@ -6,12 +6,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/*
- * TODO(b/272518464): Work around coreboot GCC preprocessor bug.
- * #line marks the *next* line, so it is off by one.
- */
-#line 14
-
 /**
  * @file
  * @brief Public Clock Control APIs
@@ -134,6 +128,10 @@ static inline int clock_control_on(const struct device *dev,
 	const struct clock_control_driver_api *api =
 		(const struct clock_control_driver_api *)dev->api;
 
+	if (api->on == NULL) {
+		return -ENOSYS;
+	}
+
 	return api->on(dev, sys);
 }
 
@@ -152,6 +150,10 @@ static inline int clock_control_off(const struct device *dev,
 {
 	const struct clock_control_driver_api *api =
 		(const struct clock_control_driver_api *)dev->api;
+
+	if (api->off == NULL) {
+		return -ENOSYS;
+	}
 
 	return api->off(dev, sys);
 }

@@ -1,7 +1,4 @@
-.. _hifive1:
-
-SiFive HiFive1
-##############
+.. zephyr:board:: hifive1
 
 Overview
 ********
@@ -25,6 +22,8 @@ and `HiFive1 Rev B <https://www.sifive.com/boards/hifive1-rev-b>`__.
 
 Programming and debugging
 *************************
+
+.. zephyr:board-supported-runners::
 
 Building
 ========

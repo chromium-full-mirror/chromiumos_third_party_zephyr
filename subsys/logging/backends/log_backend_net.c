@@ -99,12 +99,14 @@ static int do_net_init(struct log_backend_net_ctx *ctx)
 	if (IS_ENABLED(CONFIG_NET_IPV4) && server_addr.sa_family == AF_INET) {
 		local_addr = (struct sockaddr *)&local_addr4;
 		server_addr_len = sizeof(struct sockaddr_in);
+		local_addr4.sin_family = AF_INET;
 		local_addr4.sin_port = 0U;
 	}
 
 	if (IS_ENABLED(CONFIG_NET_IPV6) && server_addr.sa_family == AF_INET6) {
 		local_addr = (struct sockaddr *)&local_addr6;
 		server_addr_len = sizeof(struct sockaddr_in6);
+		local_addr6.sin6_family = AF_INET6;
 		local_addr6.sin6_port = 0U;
 	}
 
@@ -112,8 +114,6 @@ static int do_net_init(struct log_backend_net_ctx *ctx)
 		DBG("Server address unknown\n");
 		return -EINVAL;
 	}
-
-	local_addr->sa_family = server_addr.sa_family;
 
 	if (ctx->is_tcp) {
 		proto = IPPROTO_TCP;
@@ -314,7 +314,8 @@ static void init_net(struct log_backend const *const backend)
 {
 	ARG_UNUSED(backend);
 
-	if (strlen(CONFIG_LOG_BACKEND_NET_SERVER) != 0) {
+	if (sizeof(CONFIG_LOG_BACKEND_NET_SERVER) != 1) {
+		/* Non empty address, set server via Kconfig defaults */
 		const char *server = CONFIG_LOG_BACKEND_NET_SERVER;
 		bool ret;
 

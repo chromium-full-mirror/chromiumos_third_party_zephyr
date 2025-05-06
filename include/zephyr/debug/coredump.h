@@ -4,12 +4,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/*
- * TODO(b/272518464): Work around coreboot GCC preprocessor bug.
- * #line marks the *next* line, so it is off by one.
- */
-#line 12
-
 #ifndef ZEPHYR_INCLUDE_DEBUG_COREDUMP_H_
 #define ZEPHYR_INCLUDE_DEBUG_COREDUMP_H_
 
@@ -17,7 +11,6 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-#line 21
 /*
  * Define COREDUMP_*_STR as public to allow coredump_backend_other to re-use
  * these strings if necessary
@@ -36,7 +29,7 @@
  * @file
  *
  * @defgroup coredump_apis Coredump APIs
- * @ingroup os_services
+ * @ingroup debug
  * @brief Coredump APIs
  * @{
  */
@@ -242,7 +235,7 @@ struct coredump_backend_api {
 	coredump_backend_start_t		start;
 
 	/* Signal to backend of the end of coredump. */
-	coredump_backend_end_t		end;
+	coredump_backend_end_t			end;
 
 	/* Raw buffer output */
 	coredump_backend_buffer_output_t	buffer_output;

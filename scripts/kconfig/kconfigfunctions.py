@@ -149,6 +149,18 @@ def dt_node_enabled(kconf, name, node):
     return "y" if node and node.status == "okay" else "n"
 
 
+def dt_nodelabel_exists(kconf, _, label):
+    """
+    This function returns "y" if a nodelabel exists and "n" otherwise.
+    """
+    if doc_mode or edt is None:
+        return "n"
+
+    node = edt.label2node.get(label)
+
+    return "y" if node else "n"
+
+
 def dt_nodelabel_enabled(kconf, _, label):
     """
     This function is like dt_node_enabled(), but the 'label' argument
@@ -738,7 +750,7 @@ def dt_compat_enabled(kconf, _, compat):
 
 def dt_compat_on_bus(kconf, _, compat, bus):
     """
-    This function takes a 'compat' and returns "y" if we find an "enabled"
+    This function takes a 'compat' and returns "y" if we find an enabled
     compatible node in the EDT which is on bus 'bus'. It returns "n" otherwise.
     """
     if doc_mode or edt is None:
@@ -751,10 +763,13 @@ def dt_compat_on_bus(kconf, _, compat, bus):
 
     return "n"
 
-def dt_compat_any_has_prop(kconf, _, compat, prop):
+def dt_compat_any_has_prop(kconf, _, compat, prop, value=None):
     """
-    This function takes a 'compat' and a 'prop' and returns "y" if any
-    node with compatible 'compat' also has a valid property 'prop'.
+    This function takes a 'compat', a 'prop', and a 'value'.
+    If value=None, the function returns "y" if any
+    enabled node with compatible 'compat' also has a valid property 'prop'.
+    If value is given, the function returns "y" if any enabled node with compatible 'compat'
+    also has a valid property 'prop' with value 'value'.
     It returns "n" otherwise.
     """
     if doc_mode or edt is None:
@@ -763,6 +778,25 @@ def dt_compat_any_has_prop(kconf, _, compat, prop):
     if compat in edt.compat2okay:
         for node in edt.compat2okay[compat]:
             if prop in node.props:
+                if value is None:
+                    return "y"
+                elif str(node.props[prop].val) == value:
+                    return "y"
+    return "n"
+
+def dt_compat_any_not_has_prop(kconf, _, compat, prop):
+    """
+    This function takes a 'compat', and a 'prop'.
+    The function returns "y" if any enabled node with compatible 'compat'
+    does NOT contain the property 'prop'.
+    It returns "n" otherwise.
+    """
+    if doc_mode or edt is None:
+        return "n"
+
+    if compat in edt.compat2okay:
+        for node in edt.compat2okay[compat]:
+            if prop not in node.props:
                 return "y"
 
     return "n"
@@ -805,7 +839,7 @@ def dt_node_has_compat(kconf, _, path, compat):
 
 def dt_nodelabel_enabled_with_compat(kconf, _, label, compat):
     """
-    This function takes a 'label' and returns "y" if an "enabled" node with
+    This function takes a 'label' and returns "y" if an enabled node with
     such label can be found in the EDT and that node is compatible with the
     provided 'compat', otherwise it returns "n".
     """
@@ -1000,13 +1034,15 @@ functions = {
         "dt_has_compat": (dt_has_compat, 1, 1),
         "dt_compat_enabled": (dt_compat_enabled, 1, 1),
         "dt_compat_on_bus": (dt_compat_on_bus, 2, 2),
-        "dt_compat_any_has_prop": (dt_compat_any_has_prop, 2, 2),
+        "dt_compat_any_has_prop": (dt_compat_any_has_prop, 2, 3),
+        "dt_compat_any_not_has_prop": (dt_compat_any_not_has_prop, 2, 2),
         "dt_chosen_label": (dt_chosen_label, 1, 1),
         "dt_chosen_enabled": (dt_chosen_enabled, 1, 1),
         "dt_chosen_path": (dt_chosen_path, 1, 1),
         "dt_chosen_has_compat": (dt_chosen_has_compat, 2, 2),
         "dt_path_enabled": (dt_node_enabled, 1, 1),
         "dt_alias_enabled": (dt_node_enabled, 1, 1),
+        "dt_nodelabel_exists": (dt_nodelabel_exists, 1, 1),
         "dt_nodelabel_enabled": (dt_nodelabel_enabled, 1, 1),
         "dt_nodelabel_enabled_with_compat": (dt_nodelabel_enabled_with_compat, 2, 2),
         "dt_chosen_reg_addr_int": (dt_chosen_reg, 1, 3),

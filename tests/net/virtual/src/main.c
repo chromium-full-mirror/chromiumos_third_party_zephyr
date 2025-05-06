@@ -22,7 +22,7 @@ LOG_MODULE_REGISTER(net_test, NET_LOG_LEVEL);
 #include <zephyr/ztest.h>
 
 #include <zephyr/net/dummy.h>
-#include <zephyr/net/buf.h>
+#include <zephyr/net_buf.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/net/virtual.h>
 #include <zephyr/net/virtual_mgmt.h>
@@ -212,7 +212,7 @@ static uint8_t *net_iface_get_mac(const struct device *dev)
 		data->mac_addr[5] = sys_rand8_get();
 	}
 
-	data->ll_addr.addr = data->mac_addr;
+	memcpy(data->ll_addr.addr, data->mac_addr, sizeof(data->mac_addr));
 	data->ll_addr.len = 6U;
 
 	return data->mac_addr;
@@ -309,8 +309,9 @@ static void iface_cb(struct net_if *iface, void *user_data)
 	if ((iface != net_if_lookup_by_dev(DEVICE_GET(eth_test_dummy1))) &&
 	    (iface != net_if_lookup_by_dev(DEVICE_GET(eth_test_dummy2))) &&
 	    (iface != net_if_lookup_by_dev(DEVICE_GET(eth_test))) &&
-	    (net_if_l2(iface) != &NET_L2_GET_NAME(VIRTUAL)))
+	    (net_if_l2(iface) != &NET_L2_GET_NAME(VIRTUAL))) {
 		return;
+	}
 
 	DBG("Interface %p (%s) [%d]\n", iface, iface2str(iface),
 	    net_if_get_by_iface(iface));
@@ -502,19 +503,17 @@ static void test_address_setup(void)
 
 static bool add_neighbor(struct net_if *iface, struct in6_addr *addr)
 {
-	struct net_linkaddr_storage llstorage;
 	struct net_linkaddr lladdr;
 	struct net_nbr *nbr;
 
-	llstorage.addr[0] = 0x01;
-	llstorage.addr[1] = 0x02;
-	llstorage.addr[2] = 0x33;
-	llstorage.addr[3] = 0x44;
-	llstorage.addr[4] = 0x05;
-	llstorage.addr[5] = 0x06;
+	lladdr.addr[0] = 0x01;
+	lladdr.addr[1] = 0x02;
+	lladdr.addr[2] = 0x33;
+	lladdr.addr[3] = 0x44;
+	lladdr.addr[4] = 0x05;
+	lladdr.addr[5] = 0x06;
 
 	lladdr.len = 6U;
-	lladdr.addr = llstorage.addr;
 	lladdr.type = NET_LINK_ETHERNET;
 
 	nbr = net_ipv6_nbr_add(iface, addr, &lladdr, false,

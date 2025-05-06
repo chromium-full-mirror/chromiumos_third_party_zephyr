@@ -5,33 +5,44 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  */
-
-#include <zephyr/kernel.h>
-#include <string.h>
 #include <errno.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+
+#include <zephyr/autoconf.h>
+#include <zephyr/bluetooth/addr.h>
+#include <zephyr/bluetooth/att.h>
+#include <zephyr/bluetooth/bluetooth.h>
+#include <zephyr/bluetooth/conn.h>
+#include <zephyr/bluetooth/gatt.h>
+#include <zephyr/bluetooth/hci.h>
+#include <zephyr/bluetooth/hci_types.h>
+#include <zephyr/bluetooth/l2cap.h>
+#include <zephyr/bluetooth/uuid.h>
+#include <zephyr/kernel.h>
+#include <zephyr/kernel/thread.h>
+#include <zephyr/logging/log.h>
+#include <zephyr/net_buf.h>
+#include <zephyr/sys/__assert.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/slist.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/sys/util_macro.h>
+#include <zephyr/sys_clock.h>
+#include <zephyr/toolchain.h>
+#include <sys/types.h>
 
-#include <zephyr/bluetooth/hci.h>
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/uuid.h>
-#include <zephyr/bluetooth/att.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/drivers/bluetooth/hci_driver.h>
-
+#include "att_internal.h"
 #include "common/bt_str.h"
-
-#include "hci_core.h"
 #include "conn_internal.h"
+#include "gatt_internal.h"
+#include "hci_core.h"
 #include "l2cap_internal.h"
 #include "smp.h"
-#include "att_internal.h"
-#include "gatt_internal.h"
 
 #define LOG_LEVEL CONFIG_BT_ATT_LOG_LEVEL
-#include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(bt_att);
 
 #define ATT_CHAN(_ch) CONTAINER_OF(_ch, struct bt_att_chan, chan.chan)
@@ -134,7 +145,7 @@ static uint16_t bt_att_mtu(struct bt_att_chan *chan)
 /* Descriptor of application-specific authorization callbacks that are used
  * with the CONFIG_BT_GATT_AUTHORIZATION_CUSTOM Kconfig enabled.
  */
-const static struct bt_gatt_authorization_cb *authorization_cb;
+static const struct bt_gatt_authorization_cb *authorization_cb;
 
 /* ATT connection specific data */
 struct bt_att {
@@ -294,26 +305,26 @@ static void bt_att_disconnected(struct bt_l2cap_chan *chan);
 
 struct net_buf *bt_att_create_rsp_pdu(struct bt_att_chan *chan, uint8_t op);
 
-static void bt_att_sent(struct bt_l2cap_chan *ch);
-
-static void att_sent(void *user_data)
+static void att_disconnect(struct bt_att_chan *chan)
 {
-	struct bt_att_tx_meta_data *data = user_data;
-	struct bt_att_chan *att_chan = data->att_chan;
-	struct bt_conn *conn = att_chan->att->conn;
-	struct bt_l2cap_chan *chan = &att_chan->chan.chan;
+	char addr[BT_ADDR_LE_STR_LEN];
+	int err;
 
-	__ASSERT_NO_MSG(!bt_att_is_enhanced(att_chan));
-
-	LOG_DBG("conn %p chan %p", conn, chan);
-
-	/* For EATT, `bt_att_sent` is assigned to the `.sent` L2 callback.
-	 * L2CAP will then call it once the SDU has finished sending.
-	 *
-	 * For UATT, this won't happen, as static LE l2cap channels don't have
-	 * SDUs. Call it manually instead.
+	/* In rare circumstances we are "forced" to disconnect the ATT bearer and the ACL.
+	 * Examples of when this is right course of action is when there is an ATT timeout, we
+	 * receive an unexpected response from the server, or the response from the server is
+	 * invalid
 	 */
-	bt_att_sent(chan);
+
+	bt_addr_le_to_str(bt_conn_get_dst(chan->att->conn), addr, sizeof(addr));
+	LOG_DBG("ATT disconnecting device %s", addr);
+
+	bt_att_disconnected(&chan->chan.chan);
+
+	err = bt_conn_disconnect(chan->chan.chan.conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
+	if (err) {
+		LOG_ERR("Disconnecting failed (err %d)", err);
+	}
 }
 
 /* In case of success the ownership of the buffer is transferred to the stack
@@ -448,27 +459,27 @@ static struct net_buf *get_first_buf_matching_chan(struct k_fifo *fifo, struct b
 
 		k_fifo_init(&skipped);
 
-		while ((buf = net_buf_get(fifo, K_NO_WAIT))) {
+		while ((buf = k_fifo_get(fifo, K_NO_WAIT))) {
 			meta = bt_att_get_tx_meta_data(buf);
 			if (!ret &&
 			    att_chan_matches_chan_opt(chan, meta->chan_opt)) {
 				ret = buf;
 			} else {
-				net_buf_put(&skipped, buf);
+				k_fifo_put(&skipped, buf);
 			}
 		}
 
 		__ASSERT_NO_MSG(k_fifo_is_empty(fifo));
 
-		while ((buf = net_buf_get(&skipped, K_NO_WAIT))) {
-			net_buf_put(fifo, buf);
+		while ((buf = k_fifo_get(&skipped, K_NO_WAIT))) {
+			k_fifo_put(fifo, buf);
 		}
 
 		__ASSERT_NO_MSG(k_fifo_is_empty(&skipped));
 
 		return ret;
 	} else {
-		return net_buf_get(fifo, K_NO_WAIT);
+		return k_fifo_get(fifo, K_NO_WAIT);
 	}
 }
 
@@ -526,7 +537,7 @@ static int process_queue(struct bt_att_chan *chan, struct k_fifo *queue)
 }
 
 /* Send requests without taking tx_sem */
-static int chan_req_send(struct bt_att_chan *chan, struct bt_att_req *req)
+static int bt_att_chan_req_send(struct bt_att_chan *chan, struct bt_att_req *req)
 {
 	struct net_buf *buf;
 	int err;
@@ -583,7 +594,8 @@ static void bt_att_sent(struct bt_l2cap_chan *ch)
 	if (!chan->req && !sys_slist_is_empty(&att->reqs)) {
 		sys_snode_t *node = sys_slist_get(&att->reqs);
 
-		if (chan_req_send(chan, ATT_REQ(node)) >= 0) {
+		err = bt_att_chan_req_send(chan, ATT_REQ(node));
+		if (err == 0) {
 			return;
 		}
 
@@ -663,9 +675,20 @@ static void att_on_sent_cb(struct bt_att_tx_meta_data *meta)
 	}
 
 	if (!bt_att_is_enhanced(meta->att_chan)) {
-		/* For EATT, L2CAP will call it after the SDU is fully sent. */
-		LOG_DBG("UATT bearer, calling att_sent");
-		att_sent(meta);
+		struct bt_att_chan *att_chan = meta->att_chan;
+		struct bt_conn *conn = att_chan->att->conn;
+		struct bt_l2cap_chan *l2cap_chan = &att_chan->chan.chan;
+
+		ARG_UNUSED(conn);
+		LOG_DBG("UATT bearer, calling bt_att_sent: conn %p chan %p", conn, l2cap_chan);
+
+		/* For EATT, `bt_att_sent` is assigned to the `.sent` L2 callback.
+		 * L2CAP will then call it once the SDU has finished sending.
+		 *
+		 * For UATT, this won't happen, as static LE l2cap channels don't have
+		 * SDUs. Call it manually instead.
+		 */
+		bt_att_sent(l2cap_chan);
 	}
 
 	switch (op_type) {
@@ -706,8 +729,19 @@ static struct net_buf *bt_att_chan_create_pdu(struct bt_att_chan *chan, uint8_t 
 		/* Use a timeout only when responding/confirming */
 		timeout = BT_ATT_TIMEOUT;
 		break;
-	default:
-		timeout = K_FOREVER;
+	default: {
+		k_tid_t current_thread = k_current_get();
+
+		if (current_thread == k_work_queue_thread_get(&k_sys_work_q)) {
+			/* No blocking in the sysqueue. */
+			timeout = K_NO_WAIT;
+		} else if (current_thread == att_handle_rsp_thread) {
+			/* Blocking would cause deadlock. */
+			timeout = K_NO_WAIT;
+		} else {
+			timeout = K_FOREVER;
+		}
+	}
 	}
 
 	/* This will reserve headspace for lower layers */
@@ -779,7 +813,7 @@ static void bt_att_chan_send_rsp(struct bt_att_chan *chan, struct net_buf *buf)
 	err = chan_send(chan, buf);
 	if (err) {
 		/* Responses need to be sent back using the same channel */
-		net_buf_put(&chan->tx_queue, buf);
+		k_fifo_put(&chan->tx_queue, buf);
 	}
 }
 
@@ -869,19 +903,6 @@ static uint8_t att_mtu_req(struct bt_att_chan *chan, struct net_buf *buf)
 	return 0;
 }
 
-static int bt_att_chan_req_send(struct bt_att_chan *chan,
-				struct bt_att_req *req)
-{
-	__ASSERT_NO_MSG(chan);
-	__ASSERT_NO_MSG(req);
-	__ASSERT_NO_MSG(req->func);
-	__ASSERT_NO_MSG(!chan->req);
-
-	LOG_DBG("req %p", req);
-
-	return chan_req_send(chan, req);
-}
-
 static void att_req_send_process(struct bt_att *att)
 {
 	struct bt_att_req *req = NULL;
@@ -909,7 +930,7 @@ static void att_req_send_process(struct bt_att *att)
 			continue;
 		}
 
-		if (bt_att_chan_req_send(chan, req) >= 0) {
+		if (bt_att_chan_req_send(chan, req) == 0) {
 			return;
 		}
 
@@ -931,7 +952,8 @@ static uint8_t att_handle_rsp(struct bt_att_chan *chan, void *pdu, uint16_t len,
 
 	if (!chan->req) {
 		LOG_WRN("No pending ATT request");
-		goto process;
+		att_disconnect(chan);
+		return 0; /* Returning a non-0 value would attempt to send an error response */
 	}
 
 	/* Check if request has been cancelled */
@@ -1547,6 +1569,30 @@ static uint8_t att_read_type_req(struct bt_att_chan *chan, struct net_buf *buf)
 		send_err_rsp(chan, BT_ATT_OP_READ_TYPE_REQ, err_handle,
 			     BT_ATT_ERR_INVALID_HANDLE);
 		return 0;
+	}
+
+	/* If a client that has indicated support for robust caching (by setting the Robust
+	 * Caching bit in the Client Supported Features characteristic) is change-unaware
+	 * then the server shall send an ATT_ERROR_RSP PDU with the Error Code
+	 * parameter set to Database Out Of Sync (0x12) when either of the following happen:
+	 * • That client requests an operation at any Attribute Handle or list of Attribute
+	 *   Handles by sending an ATT request.
+	 * • That client sends an ATT_READ_BY_TYPE_REQ PDU with Attribute Type
+	 *   other than «Include» or «Characteristic» and an Attribute Handle range
+	 *   other than 0x0001 to 0xFFFF.
+	 * (Core Specification 5.4 Vol 3. Part G. 2.5.2.1 Robust Caching).
+	 */
+	if (!bt_gatt_change_aware(chan->chan.chan.conn, true)) {
+		if (bt_uuid_cmp(&u.uuid, BT_UUID_GATT_INCLUDE) != 0 &&
+		    bt_uuid_cmp(&u.uuid, BT_UUID_GATT_CHRC) != 0 &&
+		    (start_handle != BT_ATT_FIRST_ATTRIBUTE_HANDLE ||
+		     end_handle != BT_ATT_LAST_ATTRIBUTE_HANDLE)) {
+			if (!atomic_test_and_set_bit(chan->flags, ATT_OUT_OF_SYNC_SENT)) {
+				return BT_ATT_ERR_DB_OUT_OF_SYNC;
+			} else {
+				return 0;
+			}
+		}
 	}
 
 	return att_read_type_rsp(chan, &u.uuid, start_handle, end_handle);
@@ -2461,8 +2507,9 @@ static int att_change_security(struct bt_conn *conn, uint8_t err)
 
 	switch (err) {
 	case BT_ATT_ERR_INSUFFICIENT_ENCRYPTION:
-		if (conn->sec_level >= BT_SECURITY_L2)
+		if (conn->sec_level >= BT_SECURITY_L2) {
 			return -EALREADY;
+		}
 		sec = BT_SECURITY_L2;
 		break;
 	case BT_ATT_ERR_AUTHENTICATION:
@@ -3063,7 +3110,7 @@ static void att_reset(struct bt_att *att)
 	(void)k_work_cancel_delayable_sync(&att->eatt.connection_work, &sync);
 #endif /* CONFIG_BT_EATT */
 
-	while ((buf = net_buf_get(&att->tx_queue, K_NO_WAIT))) {
+	while ((buf = k_fifo_get(&att->tx_queue, K_NO_WAIT))) {
 		net_buf_unref(buf);
 	}
 
@@ -3098,7 +3145,7 @@ static void att_chan_detach(struct bt_att_chan *chan)
 	sys_slist_find_and_remove(&chan->att->chans, &chan->node);
 
 	/* Release pending buffers */
-	while ((buf = net_buf_get(&chan->tx_queue, K_NO_WAIT))) {
+	while ((buf = k_fifo_get(&chan->tx_queue, K_NO_WAIT))) {
 		net_buf_unref(buf);
 	}
 
@@ -3115,11 +3162,10 @@ static void att_timeout(struct k_work *work)
 {
 	char addr[BT_ADDR_LE_STR_LEN];
 	struct k_work_delayable *dwork = k_work_delayable_from_work(work);
-	struct bt_att_chan *chan = CONTAINER_OF(dwork, struct bt_att_chan,
-						timeout_work);
+	struct bt_att_chan *chan = CONTAINER_OF(dwork, struct bt_att_chan, timeout_work);
 
 	bt_addr_le_to_str(bt_conn_get_dst(chan->att->conn), addr, sizeof(addr));
-	LOG_ERR("ATT Timeout for device %s", addr);
+	LOG_ERR("ATT Timeout for device %s. Disconnecting...", addr);
 
 	/* BLUETOOTH SPECIFICATION Version 4.2 [Vol 3, Part F] page 480:
 	 *
@@ -3129,7 +3175,13 @@ static void att_timeout(struct k_work *work)
 	 * requests, commands, indications or notifications shall be sent to the
 	 * target device on this ATT Bearer.
 	 */
-	bt_att_disconnected(&chan->chan.chan);
+
+	/* The timeout state is local and can block new ATT operations, but does not affect the
+	 * remote side. Disconnecting the GATT connection upon ATT timeout simplifies error handling
+	 * for developers. This reduces rare failure conditions to a common one, allowing developers
+	 * to handle unexpected disconnections without needing special cases for ATT timeouts.
+	 */
+	att_disconnect(chan);
 }
 
 static struct bt_att_chan *att_get_fixed_chan(struct bt_conn *conn)
@@ -3305,7 +3357,7 @@ static void bt_att_status(struct bt_l2cap_chan *ch, atomic_t *status)
 		return;
 	}
 
-	if (bt_att_chan_req_send(chan, ATT_REQ(node)) >= 0) {
+	if (bt_att_chan_req_send(chan, ATT_REQ(node)) == 0) {
 		return;
 	}
 
@@ -3640,7 +3692,7 @@ int bt_eatt_connect(struct bt_conn *conn, size_t num_channels)
 	}
 
 	while (offset < i) {
-		/* bt_l2cap_ecred_chan_connect() uses the first L2CAP_ECRED_CHAN_MAX_PER_REQ
+		/* bt_l2cap_ecred_chan_connect() uses the first BT_L2CAP_ECRED_CHAN_MAX_PER_REQ
 		 * elements of the array or until a null-terminator is reached.
 		 */
 		err = bt_l2cap_ecred_chan_connect(conn, &chan[offset], BT_EATT_PSM);
@@ -3648,7 +3700,7 @@ int bt_eatt_connect(struct bt_conn *conn, size_t num_channels)
 			return err;
 		}
 
-		offset += L2CAP_ECRED_CHAN_MAX_PER_REQ;
+		offset += BT_L2CAP_ECRED_CHAN_MAX_PER_REQ;
 	}
 
 	return 0;
@@ -3739,7 +3791,7 @@ int bt_eatt_reconfigure(struct bt_conn *conn, uint16_t mtu)
 	}
 
 	while (offset < i) {
-		/* bt_l2cap_ecred_chan_reconfigure() uses the first L2CAP_ECRED_CHAN_MAX_PER_REQ
+		/* bt_l2cap_ecred_chan_reconfigure() uses the first BT_L2CAP_ECRED_CHAN_MAX_PER_REQ
 		 * elements of the array or until a null-terminator is reached.
 		 */
 		err = bt_l2cap_ecred_chan_reconfigure(&chans[offset], mtu);
@@ -3747,7 +3799,7 @@ int bt_eatt_reconfigure(struct bt_conn *conn, uint16_t mtu)
 			return err;
 		}
 
-		offset += L2CAP_ECRED_CHAN_MAX_PER_REQ;
+		offset += BT_L2CAP_ECRED_CHAN_MAX_PER_REQ;
 	}
 
 	return 0;
@@ -3832,6 +3884,27 @@ uint16_t bt_att_get_mtu(struct bt_conn *conn)
 	return mtu;
 }
 
+uint16_t bt_att_get_uatt_mtu(struct bt_conn *conn)
+{
+	struct bt_att_chan *chan, *tmp;
+	struct bt_att *att;
+
+	att = att_get(conn);
+	if (!att) {
+		return 0;
+	}
+
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&att->chans, chan, tmp, node) {
+		if (!bt_att_is_enhanced(chan)) {
+			return bt_att_mtu(chan);
+		}
+	}
+
+	LOG_WRN("No UATT channel found in %p", conn);
+
+	return 0;
+}
+
 static void att_chan_mtu_updated(struct bt_att_chan *updated_chan)
 {
 	struct bt_att *att = updated_chan->att;
@@ -3906,7 +3979,7 @@ int bt_att_send(struct bt_conn *conn, struct net_buf *buf)
 		return -ENOTCONN;
 	}
 
-	net_buf_put(&att->tx_queue, buf);
+	k_fifo_put(&att->tx_queue, buf);
 	att_send_process(att);
 
 	return 0;

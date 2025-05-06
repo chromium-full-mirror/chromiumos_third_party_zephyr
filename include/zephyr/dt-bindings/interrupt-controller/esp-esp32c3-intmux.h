@@ -70,4 +70,9 @@
 #define BAK_PMS_VIOLATE_INTR_SOURCE         60
 #define CACHE_CORE0_ACS_INTR_SOURCE         61
 
+/* Zero will allocate low/medium levels of priority (ESP_INTR_FLAG_LOWMED) */
+#define IRQ_DEFAULT_PRIORITY	0
+
+#define ESP_INTR_FLAG_SHARED	(1<<8)	/* Interrupt can be shared between ISRs */
+
 #endif

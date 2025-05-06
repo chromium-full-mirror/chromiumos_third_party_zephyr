@@ -63,29 +63,6 @@ this purpose, the :c:func:`input_to_hid_code` and
 :c:func:`input_to_hid_modifier` functions can be used to map input codes to HID
 codes and modifiers.
 
-Kscan Compatibility
-*******************
-
-Input devices generating X/Y/Touch events can be used in existing applications
-based on the :ref:`kscan_api` API by enabling both
-:kconfig:option:`CONFIG_INPUT` and :kconfig:option:`CONFIG_KSCAN`, defining a
-:dtcompatible:`zephyr,kscan-input` node as a child node of the corresponding
-input device and pointing the ``zephyr,keyboard-scan`` chosen node to the
-compatibility device node, for example:
-
-.. code-block:: devicetree
-
-    chosen {
-        zephyr,keyboard-scan = &kscan_input;
-    };
-
-    ft5336@38 {
-        ...
-        kscan_input: kscan-input {
-            compatible = "zephyr,kscan-input";
-        };
-    };
-
 General Purpose Drivers
 ***********************
 
@@ -100,6 +77,8 @@ General Purpose Drivers
   matrix to key events.
 - :dtcompatible:`zephyr,input-longpress`: listens for key events, emits events
   for short and long press.
+- :dtcompatible:`zephyr,input-double-tap`: listens for key events, emits events
+  for input double taps
 - :dtcompatible:`zephyr,lvgl-button-input`
   :dtcompatible:`zephyr,lvgl-encoder-input`
   :dtcompatible:`zephyr,lvgl-keypad-input`
@@ -129,3 +108,8 @@ Analog Axis API Reference
 *************************
 
 .. doxygengroup:: input_analog_axis
+
+Touchscreen API Reference
+*************************
+
+.. doxygengroup:: touch_events

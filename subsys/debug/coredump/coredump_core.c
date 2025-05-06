@@ -24,6 +24,10 @@ static struct coredump_backend_api
 extern struct coredump_backend_api coredump_backend_intel_adsp_mem_window;
 static struct coredump_backend_api
 	*backend_api = &coredump_backend_intel_adsp_mem_window;
+#elif defined(CONFIG_DEBUG_COREDUMP_BACKEND_IN_MEMORY)
+extern struct coredump_backend_api coredump_backend_in_memory;
+static struct coredump_backend_api
+	*backend_api = &coredump_backend_in_memory;
 #elif defined(CONFIG_DEBUG_COREDUMP_BACKEND_OTHER)
 extern struct coredump_backend_api coredump_backend_other;
 static struct coredump_backend_api
@@ -36,6 +40,14 @@ static struct coredump_backend_api
 #include <zephyr/drivers/coredump.h>
 #define DT_DRV_COMPAT zephyr_coredump
 #endif
+
+#if defined(CONFIG_DEBUG_COREDUMP_DUMP_THREAD_PRIV_STACK)
+__weak void arch_coredump_priv_stack_dump(struct k_thread *thread)
+{
+	/* Stub if architecture has not implemented this. */
+	ARG_UNUSED(thread);
+}
+#endif /* CONFIG_DEBUG_COREDUMP_DUMP_THREAD_PRIV_STACK */
 
 static void dump_header(unsigned int reason)
 {
@@ -81,15 +93,19 @@ static void dump_thread(struct k_thread *thread)
 	end_addr = thread->stack_info.start + thread->stack_info.size;
 
 	coredump_memory_dump(thread->stack_info.start, end_addr);
+
+#if defined(CONFIG_DEBUG_COREDUMP_DUMP_THREAD_PRIV_STACK)
+	if ((thread->base.user_options & K_USER) == K_USER) {
+		arch_coredump_priv_stack_dump(thread);
+	}
+#endif /* CONFIG_DEBUG_COREDUMP_DUMP_THREAD_PRIV_STACK */
 }
 #endif
 
 #if defined(CONFIG_COREDUMP_DEVICE)
 static void process_coredump_dev_memory(const struct device *dev)
 {
-	struct coredump_driver_api *api = (struct coredump_driver_api *)dev->api;
-
-	api->dump(dev);
+	DEVICE_API_GET(coredump, dev)->dump(dev);
 }
 #endif
 

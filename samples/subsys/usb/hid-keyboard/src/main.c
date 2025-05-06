@@ -149,6 +149,10 @@ static void msg_cb(struct usbd_context *const usbd_ctx,
 {
 	LOG_INF("USBD message: %s", usbd_msg_type_string(msg->type));
 
+	if (msg->type == USBD_MSG_CONFIGURATION) {
+		LOG_INF("\tConfiguration value %d", msg->status);
+	}
+
 	if (usbd_can_detect_vbus(usbd_ctx)) {
 		if (msg->type == USBD_MSG_VBUS_READY) {
 			if (usbd_enable(usbd_ctx)) {
@@ -272,6 +276,17 @@ int main(void)
 
 		if (!kb_ready) {
 			LOG_INF("USB HID device is not ready");
+			continue;
+		}
+
+		if (usbd_is_suspended(sample_usbd)) {
+			/* on a press of any button, send wakeup request */
+			if (kb_evt.value) {
+				ret = usbd_wakeup_request(sample_usbd);
+				if (ret) {
+					LOG_ERR("Remote wakeup error, %d", ret);
+				}
+			}
 			continue;
 		}
 

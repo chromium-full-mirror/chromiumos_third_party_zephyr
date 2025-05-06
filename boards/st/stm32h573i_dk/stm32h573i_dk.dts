@@ -58,6 +58,7 @@
 		sw0 = &user_button;
 		watchdog0 = &iwdg;
 		die-temp0 = &die_temp;
+		die-temp1 = &digi_die_temp;
 		volt-sensor0 = &vref;
 		volt-sensor1 = &vbat;
 	};
@@ -165,6 +166,8 @@
 		     &eth_txd0_pg13
 		     &eth_txd1_pg12>;
 	pinctrl-names = "default";
+	phy-connection-type = "rmii";
+	phy-handle = <&eth_phy>;
 };
 
 &mdio {
@@ -172,10 +175,9 @@
 	pinctrl-0 = <&eth_mdio_pa2 &eth_mdc_pc1>;
 	pinctrl-names = "default";
 
-	ethernet-phy@0 {
+	eth_phy: ethernet-phy@0 {
 		compatible = "ethernet-phy";
 		reg = <0x00>;
-		status = "okay";
 	};
 };
 
@@ -236,9 +238,11 @@
 };
 
 &adc1 {
+	clocks = <&rcc STM32_CLOCK_BUS_AHB2 0x00000400>,
+		 <&rcc STM32_SRC_HCLK ADCDAC_SEL(0)>;
 	pinctrl-0 = <&adc1_inp6_pf12>; /* Arduino A5 */
 	pinctrl-names = "default";
-	st,adc-clock-source = <ASYNC>;
+	st,adc-clock-source = "ASYNC";
 	st,adc-prescaler = <6>;
 	status = "okay";
 };
@@ -269,9 +273,10 @@
 
 	status = "okay";
 
-	mx25lm51245: ospi-nor-flash@90000000 {
+	mx25lm51245: ospi-nor-flash@0 {
 		compatible = "st,stm32-xspi-nor";
-		reg = <0x90000000 DT_SIZE_M(64)>; /* 512 Mbits */
+		reg = <0>;
+		size = <DT_SIZE_M(512)>; /* 512 Mbits */
 		ospi-max-frequency = <DT_FREQ_M(50)>;
 		spi-bus-width = <XSPI_OCTO_MODE>;
 		data-rate = <XSPI_DTR_TRANSFER>;
@@ -297,6 +302,7 @@
 		     &sdmmc1_ck_pc12 &sdmmc1_cmd_pd2>;
 	pinctrl-names = "default";
 	cd-gpios = <&gpioh 14 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+	disk-name = "SD";
 	status = "okay";
 };
 
@@ -308,6 +314,10 @@ zephyr_udc0: &usb {
 };
 
 &die_temp {
+	status = "okay";
+};
+
+&digi_die_temp {
 	status = "okay";
 };
 
