@@ -2,7 +2,7 @@
 
 /*
  * Copyright (c) 2019 Bose Corporation
- * Copyright (c) 2020-2022 Nordic Semiconductor ASA
+ * Copyright (c) 2020-2025 Nordic Semiconductor ASA
  *
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -172,7 +172,7 @@ static int sirk_encrypt(struct bt_conn *conn, const struct bt_csip_sirk *sirk,
 		/* test_k is from the sample data from A.2 in the CSIS spec */
 		static const uint8_t test_k[] = {
 			/* Sample data is in big-endian, we need it in little-endian. */
-+                       REVERSE_ARGS(0x67, 0x6e, 0x1b, 0x9b,
+			REVERSE_ARGS(0x67, 0x6e, 0x1b, 0x9b,
 				     0xd4, 0x48, 0x69, 0x6f,
 				     0x06, 0x1e, 0xc6, 0x22,
 				     0x3c, 0xe5, 0xce, 0xd9) };
@@ -647,7 +647,7 @@ static void csip_bond_deleted(uint8_t id, const bt_addr_le_t *peer)
 	}
 }
 
-static struct bt_conn_cb conn_callbacks = {
+BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.disconnected = csip_disconnected,
 	.security_changed = csip_security_changed,
 };
@@ -909,14 +909,8 @@ int bt_csip_set_member_register(const struct bt_csip_set_member_register_param *
 				struct bt_csip_set_member_svc_inst **svc_inst)
 {
 	static bool first_register;
-	static uint8_t instance_cnt;
 	struct bt_csip_set_member_svc_inst *inst;
 	int err;
-
-	if (instance_cnt == ARRAY_SIZE(svc_insts)) {
-		LOG_DBG("Too many set member registrations");
-		return -ENOMEM;
-	}
 
 	CHECKIF(param == NULL) {
 		LOG_DBG("NULL param");
@@ -932,20 +926,30 @@ int bt_csip_set_member_register(const struct bt_csip_set_member_register_param *
 		for (size_t i = 0U; i < ARRAY_SIZE(svc_insts); i++) {
 			k_mutex_init(&svc_insts[i].mutex);
 		}
-		bt_conn_cb_register(&conn_callbacks);
 		bt_conn_auth_info_cb_register(&auth_callbacks);
 		first_register = true;
 	}
 
-	inst = &svc_insts[instance_cnt];
+	inst = NULL;
+	ARRAY_FOR_EACH(svc_insts, i) {
+		if (svc_insts[i].service_p == NULL) {
+			inst = &svc_insts[i];
 
-	err = k_mutex_lock(&inst->mutex, K_NO_WAIT);
-	if (err != 0) {
-		LOG_DBG("Failed to lock mutex: %d", err);
-		return -EBUSY;
+			err = k_mutex_lock(&inst->mutex, K_NO_WAIT);
+			if (err != 0) {
+				/* Try the next */
+				continue;
+			}
+
+			inst->service_p = &csip_set_member_service_list[i];
+			break;
+		}
 	}
 
-	inst->service_p = &csip_set_member_service_list[instance_cnt];
+	if (inst == NULL) {
+		LOG_DBG("Too many set member registrations");
+		return -ENOMEM;
+	}
 
 	/* The removal of the optional characteristics should be done in reverse order of the order
 	 * in BT_CSIP_SERVICE_DEFINITION, as that improves the performance of remove_csis_char,
@@ -973,7 +977,6 @@ int bt_csip_set_member_register(const struct bt_csip_set_member_register_param *
 		return err;
 	}
 
-	instance_cnt++;
 	k_work_init_delayable(&inst->set_lock_timer,
 			      set_lock_timer_handler);
 	inst->rank = param->rank;
@@ -1006,6 +1009,7 @@ int bt_csip_set_member_register(const struct bt_csip_set_member_register_param *
 
 int bt_csip_set_member_unregister(struct bt_csip_set_member_svc_inst *svc_inst)
 {
+	const struct bt_gatt_attr csis_definition[] = BT_CSIP_SERVICE_DEFINITION(svc_inst);
 	int err;
 
 	CHECKIF(svc_inst == NULL) {
@@ -1029,6 +1033,10 @@ int bt_csip_set_member_unregister(struct bt_csip_set_member_svc_inst *svc_inst)
 
 		return err;
 	}
+
+	/* Restore original declaration */
+	(void)memcpy(svc_inst->service_p->attrs, csis_definition, sizeof(csis_definition));
+	svc_inst->service_p->attr_count = ARRAY_SIZE(csis_definition);
 
 	(void)k_work_cancel_delayable(&svc_inst->set_lock_timer);
 

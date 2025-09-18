@@ -160,7 +160,7 @@ void ull_periph_setup(struct node_rx_pdu *rx, struct node_rx_ftr *ftr,
 	if ((lll->data_chan_count < CHM_USED_COUNT_MIN) ||
 	    (lll->data_chan_hop < CHM_HOP_COUNT_MIN) ||
 	    (lll->data_chan_hop > CHM_HOP_COUNT_MAX) ||
-	    !lll->interval) {
+	    !IN_RANGE(lll->interval, BT_HCI_LE_INTERVAL_MIN, BT_HCI_LE_INTERVAL_MAX)) {
 		invalid_release(&adv->ull, lll, link, rx);
 
 		return;
@@ -579,6 +579,9 @@ void ull_periph_ticker_cb(uint32_t ticks_at_expire, uint32_t ticks_drift,
 	/* Increment prepare reference count */
 	ref = ull_ref_inc(&conn->ull);
 	LL_ASSERT(ref);
+
+	/* Increment event counter */
+	conn->event_counter += (lazy + 1U);
 
 	/* Append timing parameters */
 	p.ticks_at_expire = ticks_at_expire;

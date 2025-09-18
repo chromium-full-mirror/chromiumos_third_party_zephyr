@@ -56,15 +56,16 @@
 		};
 
 		lfxo: lfxo {
-			compatible = "nordic,nrf-lfxo";
+			compatible = "nordic,nrf54l-lfxo";
 			#clock-cells = <0>;
 			clock-frequency = <32768>;
 		};
 
 		hfxo: hfxo {
-			compatible = "nordic,nrf-hfxo";
+			compatible = "nordic,nrf54l-hfxo";
 			#clock-cells = <0>;
 			clock-frequency = <DT_FREQ_M(32)>;
+			startup-time-us = <1650>;
 		};
 
 		hfpll: hfpll {
@@ -81,11 +82,13 @@
 #ifdef USE_NON_SECURE_ADDRESS_MAP
 		/* intentionally empty because UICR is hardware fixed to Secure */
 #else
+
 		uicr: uicr@ffd000 {
 			compatible = "nordic,nrf-uicr";
 			reg = <0xffd000 0x1000>;
 		};
 #endif
+
 		ficr: ficr@ffc000 {
 			compatible = "nordic,nrf-ficr";
 			reg = <0xffc000 0x1000>;
@@ -104,6 +107,7 @@
 			#size-cells = <1>;
 			ranges = <0x0 0x40000000 0x10000000>;
 #else
+
 		global_peripherals: peripheral@50000000 {
 			#address-cells = <1>;
 			#size-cells = <1>;
@@ -164,6 +168,7 @@
 				#address-cells = <1>;
 				#size-cells = <1>;
 				status = "disabled";
+				enable-secure;
 
 				cpuflpr_clic: interrupt-controller@f0000000 {
 					compatible = "nordic,nrf-clic";
@@ -309,6 +314,8 @@
 				rx-delay-supported;
 				rx-delay = <1>;
 				status = "disabled";
+				default-gpio-port = <&gpio1>;
+				cross-domain-pins-supported;
 			};
 
 			uart20: uart@c6000 {
@@ -318,6 +325,8 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				default-gpio-port = <&gpio1>;
+				cross-domain-pins-supported;
 			};
 
 			i2c21: i2c@c7000 {
@@ -348,6 +357,8 @@
 				rx-delay-supported;
 				rx-delay = <1>;
 				status = "disabled";
+				default-gpio-port = <&gpio1>;
+				cross-domain-pins-supported;
 			};
 
 			uart21: uart@c7000 {
@@ -357,6 +368,8 @@
 				status = "disabled";
 				endtx-stoptx-supported;
 				frame-timeout-supported;
+				default-gpio-port = <&gpio1>;
+				cross-domain-pins-supported;
 			};
 
 			i2c22: i2c@c8000 {
@@ -475,6 +488,7 @@
 				reg = <0xd2000 0x1000>;
 				interrupts = <210 NRF_DEFAULT_IRQ_PRIORITY>;
 				#pwm-cells = <3>;
+				idleout-supported;
 			};
 
 			pwm21: pwm@d3000 {
@@ -483,6 +497,7 @@
 				reg = <0xd3000 0x1000>;
 				interrupts = <211 NRF_DEFAULT_IRQ_PRIORITY>;
 				#pwm-cells = <3>;
+				idleout-supported;
 			};
 
 			pwm22: pwm@d4000 {
@@ -491,6 +506,7 @@
 				reg = <0xd4000 0x1000>;
 				interrupts = <212 NRF_DEFAULT_IRQ_PRIORITY>;
 				#pwm-cells = <3>;
+				idleout-supported;
 			};
 
 			adc: adc@d5000 {
@@ -633,19 +649,19 @@
 				#address-cells = <1>;
 				#size-cells = <1>;
 
-				gpregret1: gpregret1@51c {
+				gpregret1: gpregret1@500 {
 					#address-cells = <1>;
 					#size-cells = <1>;
 					compatible = "nordic,nrf-gpregret";
-					reg = <0x51c 0x1>;
+					reg = <0x500 0x1>;
 					status = "disabled";
 				};
 
-				gpregret2: gpregret2@520 {
+				gpregret2: gpregret2@504 {
 					#address-cells = <1>;
 					#size-cells = <1>;
 					compatible = "nordic,nrf-gpregret";
-					reg = <0x520 0x1>;
+					reg = <0x504 0x1>;
 					status = "disabled";
 				};
 			};
@@ -664,6 +680,7 @@
 #ifdef USE_NON_SECURE_ADDRESS_MAP
 			/* intentionally empty because WDT30 is hardware fixed to Secure */
 #else
+
 			wdt30: watchdog@108000 {
 				compatible = "nordic,nrf-wdt";
 				reg = <0x108000 0x620>;
@@ -741,7 +758,7 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			cpuapp_nvic: interrupt-controller@e000e100  {
+			cpuapp_nvic: interrupt-controller@e000e100 {
 				#address-cells = <1>;
 				compatible = "arm,v8m-nvic";
 				reg = <0xe000e100 0xc00>;

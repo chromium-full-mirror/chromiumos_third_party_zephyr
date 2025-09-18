@@ -67,7 +67,7 @@ static inline int zperf_upload_fin(int sock,
 	struct zperf_client_hdr_v1 *hdr;
 	uint32_t secs = end_time_us / USEC_PER_SEC;
 	uint32_t usecs = end_time_us % USEC_PER_SEC;
-	int loop = 2;
+	int loop = CONFIG_NET_ZPERF_UDP_REPORT_RETANSMISSION_COUNT;
 	int ret = 0;
 	struct timeval rcvtimeo = {
 		.tv_sec = 2,
@@ -105,10 +105,14 @@ static inline int zperf_upload_fin(int sock,
 			continue;
 		}
 
-		/* Multicast only send the negative sequence number packet
-		 * and doesn't wait for a server ack
+		/* For multicast, do not wait for a server ack. Keep resending FIN
+		 * for the configured number of attempts by forcing another loop
+		 * iteration.
 		 */
-		if (!is_mcast_pkt) {
+		if (is_mcast_pkt) {
+			ret = 0;
+			continue;
+		} else {
 			/* Receive statistics */
 			ret = zsock_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeo,
 					       sizeof(rcvtimeo));
@@ -118,12 +122,17 @@ static inline int zperf_upload_fin(int sock,
 			}
 
 			ret = zsock_recv(sock, stats, sizeof(stats), 0);
-			if (ret == -EAGAIN) {
+			if (ret < 0 && errno == EAGAIN) {
 				NET_WARN("Stats receive timeout");
 			} else if (ret < 0) {
 				NET_ERR("Failed to receive packet (%d)", errno);
 			}
 		}
+	}
+
+	/* In multicast, we never expect a stats reply. Stop here. */
+	if (is_mcast_pkt) {
+		return 0;
 	}
 
 	/* Decode statistics */
@@ -299,6 +308,7 @@ static int udp_upload(int sock, int port,
 	results->client_time_in_us =
 				k_ticks_to_us_ceil64(end_time - start_time);
 	results->packet_size = packet_size;
+	results->is_multicast = is_mcast_pkt;
 
 	return 0;
 }

@@ -123,8 +123,11 @@ static int icm45686_channel_get(const struct device *dev,
 
 static void icm45686_complete_result(struct rtio *ctx,
 				     const struct rtio_sqe *sqe,
+				     int result,
 				     void *arg)
 {
+	ARG_UNUSED(result);
+
 	struct rtio_iodev_sqe *iodev_sqe = (struct rtio_iodev_sqe *)sqe->userdata;
 	struct rtio_cqe *cqe;
 	int err = 0;
@@ -179,7 +182,7 @@ static inline void icm45686_submit_one_shot(const struct device *dev,
 	struct rtio_sqe *read_sqe = rtio_sqe_acquire(data->rtio.ctx);
 	struct rtio_sqe *complete_sqe = rtio_sqe_acquire(data->rtio.ctx);
 
-	if (!write_sqe || !read_sqe | !complete_sqe) {
+	if (!write_sqe || !read_sqe || !complete_sqe) {
 		LOG_ERR("Failed to acquire RTIO SQEs");
 		rtio_iodev_sqe_err(iodev_sqe, -ENOMEM);
 		return;
