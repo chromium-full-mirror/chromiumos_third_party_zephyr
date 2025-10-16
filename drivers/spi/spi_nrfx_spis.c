@@ -234,9 +234,9 @@ static int prepare_for_transfer(const struct device *dev,
 	return 0;
 
 buffers_set_failed:
-	dmm_buffer_in_release(dev_config->mem_reg, rx_buf, rx_buf_len, rx_buf);
+	dmm_buffer_in_release(dev_config->mem_reg, rx_buf, rx_buf_len, dmm_rx_buf);
 in_alloc_failed:
-	dmm_buffer_out_release(dev_config->mem_reg, (void *)tx_buf);
+	dmm_buffer_out_release(dev_config->mem_reg, (void *)dmm_tx_buf);
 out_alloc_failed:
 	return err;
 }
@@ -437,7 +437,7 @@ static void spi_nrfx_suspend(const struct device *dev)
 #if SPIS_CROSS_DOMAIN_PINS_HANDLE
 		int err;
 
-		err = nrf_sys_event_request_global_constlat();
+		err = nrf_sys_event_release_global_constlat();
 		(void)err;
 		__ASSERT_NO_MSG(err >= 0);
 #else
@@ -551,6 +551,32 @@ static int spi_nrfx_init(const struct device *dev)
 	return pm_device_driver_init(dev, spi_nrfx_pm_action);
 }
 
+/* Macro determines PM actions interrupt safety level.
+ *
+ * Requesting/releasing SPIS device may be ISR safe, but it cannot be reliably known whether
+ * managing its power domain is. It is then assumed that if power domains are used, device is
+ * no longer ISR safe. This macro let's us check if we will be requesting/releasing
+ * power domains and determines PM device ISR safety value.
+ *
+ * Additionally, fast SPIS devices are not ISR safe.
+ */
+#define SPIS_PM_ISR_SAFE(idx)									\
+	COND_CODE_1(										\
+		UTIL_AND(									\
+			IS_ENABLED(CONFIG_PM_DEVICE_POWER_DOMAIN),				\
+			UTIL_AND(								\
+				DT_NODE_HAS_PROP(SPIS(idx), power_domains),			\
+				DT_NODE_HAS_STATUS_OKAY(DT_PHANDLE(SPIS(idx), power_domains))	\
+			)									\
+		),										\
+		(0),										\
+		(COND_CODE_1(									\
+			SPIS_IS_FAST(idx),							\
+			(0),									\
+			(PM_DEVICE_ISR_SAFE)							\
+		))										\
+	)
+
 #define SPI_NRFX_SPIS_DEFINE(idx)					       \
 	NRF_DT_CHECK_NODE_HAS_REQUIRED_MEMORY_REGIONS(SPIS(idx));	       \
 	static void irq_connect##idx(void)				       \
@@ -597,8 +623,7 @@ static int spi_nrfx_init(const struct device *dev)
 		     !(DT_GPIO_FLAGS(SPIS(idx), wake_gpios) & GPIO_ACTIVE_LOW),\
 		     "WAKE line must be configured as active high");	       \
 	PM_DEVICE_DT_DEFINE(SPIS(idx), spi_nrfx_pm_action,		       \
-		COND_CODE_1(SPIS_IS_FAST(idx), (0),			       \
-			    (PM_DEVICE_ISR_SAFE)));			       \
+				SPIS_PM_ISR_SAFE(idx));			       \
 	SPI_DEVICE_DT_DEFINE(SPIS(idx),					       \
 			    spi_nrfx_init,				       \
 			    PM_DEVICE_DT_GET(SPIS(idx)),		       \

@@ -69,6 +69,7 @@ static uint8_t static_regions_num;
 #include "arm_mpu_v7_internal.h"
 #elif defined(CONFIG_CPU_CORTEX_M23) || \
 	defined(CONFIG_CPU_CORTEX_M33) || \
+	defined(CONFIG_CPU_CORTEX_M52) || \
 	defined(CONFIG_CPU_CORTEX_M55) || \
 	defined(CONFIG_CPU_CORTEX_M85) || \
 	defined(CONFIG_AARCH32_ARMV8_R)
@@ -144,6 +145,11 @@ static int mpu_configure_regions_from_dt(uint8_t *reg_index)
 #ifdef REGION_IO_ATTR
 		case DT_MEM_ARM_MPU_IO:
 			region_conf = _BUILD_REGION_CONF(region[idx], REGION_IO_ATTR);
+			break;
+#endif
+#ifdef REGION_DEVICE_ATTR
+		case DT_MEM_ARM_MPU_DEVICE:
+			region_conf = _BUILD_REGION_CONF(region[idx], REGION_DEVICE_ATTR);
 			break;
 #endif
 #ifdef REGION_EXTMEM_ATTR

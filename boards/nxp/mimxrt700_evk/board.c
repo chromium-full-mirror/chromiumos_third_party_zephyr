@@ -147,6 +147,9 @@ void board_early_init_hook(void)
 	CLOCK_EnableAudioPllPfdClkForDomain(kCLOCK_Pfd1, kCLOCK_AllDomainEnable);
 	CLOCK_EnableAudioPllPfdClkForDomain(kCLOCK_Pfd3, kCLOCK_AllDomainEnable);
 
+	/* Enable clock for Hifi4 access RAM arbiter1 (for SRAM start from 0x2058000000) */
+	CLOCK_EnableClock(kCLOCK_Hifi4AccessRamArbiter1);
+
 #if CONFIG_FLASH_MCUX_XSPI_XIP
 	/* Call function xspi_setup_clock() to set user configured clock for XSPI. */
 	xspi_setup_clock(XSPI0, 3U, 1U); /* Main PLL PDF1 DIV1. */
@@ -172,9 +175,16 @@ void board_early_init_hook(void)
 	CLOCK_AttachClk(kFRO2_DIV3_to_SENSE_BASE);
 	CLOCK_SetClkDiv(kCLOCK_DivSenseMainClk, 1);
 	CLOCK_AttachClk(kSENSE_BASE_to_SENSE_MAIN);
+
+	CLOCK_EnableClock(kCLOCK_SenseAccessRamArbiter0);
 #endif /* CONFIG_SOC_MIMXRT798S_CM33_CPU0 */
 
 	BOARD_InitAHBSC();
+
+#if defined(CONFIG_SECOND_CORE_MCUX)
+	POWER_DisablePD(kPDRUNCFG_SHUT_SENSEP_MAINCLK);
+	POWER_ApplyPD();
+#endif
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(edma0), okay)
 	CLOCK_EnableClock(kCLOCK_Dma0);
@@ -272,6 +282,8 @@ void board_early_init_hook(void)
 #endif
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(lpi2c15), okay)
+	CLOCK_AttachClk(kSENSE_BASE_to_LPI2C15);
+	CLOCK_SetClkDiv(kCLOCK_DivLpi2c15Clk, 2U);
 	CLOCK_EnableClock(kCLOCK_LPI2c15);
 	RESET_ClearPeripheralReset(kLPI2C15_RST_SHIFT_RSTn);
 #endif
@@ -308,14 +320,9 @@ void board_early_init_hook(void)
 	CLOCK_SetClkDiv(kCLOCK_DivFlexioClk, 1U);
 #endif
 
-#if CONFIG_BOARD_MIMXRT700_EVK_MIMXRT798S_CM33_CPU0
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio0), okay)
 	CLOCK_EnableClock(kCLOCK_Gpio0);
 	RESET_ClearPeripheralReset(kGPIO0_RST_SHIFT_RSTn);
-
-	GPIO0->PCNS = 0xFFFFFFFFU;
-	GPIO0->PCNP = 0xFFFFFFFFU;
-	GPIO0->ICNP = 0xFFFFFFFFU;
-	GPIO0->ICNS = 0xFFFFFFFFU;
 #endif
 
 #if DT_NODE_HAS_STATUS(DT_NODELABEL(gpio1), okay)
@@ -459,9 +466,7 @@ void board_early_init_hook(void)
 	CLOCK_AttachClk(kLPOSC_to_WWDT0);
 #endif
 
-#if DT_NODE_HAS_STATUS(DT_NODELABEL(sai0), okay) \
-		|| DT_NODE_HAS_STATUS(DT_NODELABEL(sai1), okay) \
-		|| DT_NODE_HAS_STATUS(DT_NODELABEL(sai2), okay)
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(sai0), okay)
 	/* SAI clock 368.64 / 15 = 24.576MHz */
 	CLOCK_AttachClk(kAUDIO_PLL_PFD3_to_AUDIO_VDD2);
 	CLOCK_AttachClk(kAUDIO_VDD2_to_SAI012);
@@ -561,12 +566,10 @@ static void GlikeyClearConfig(GLIKEY_Type *base)
 static void BOARD_InitAHBSC(void)
 {
 #if defined(CONFIG_SOC_MIMXRT798S_CM33_CPU0)
-	GlikeyWriteEnable(GLIKEY0, 0U);
 	GlikeyWriteEnable(GLIKEY0, 1U);
-	GlikeyWriteEnable(GLIKEY0, 2U);
+	AHBSC0->MISC_CTRL_DP_REG = 0x000086aa;
 	/* AHBSC0 MISC_CTRL_REG, disable Privilege & Secure checking. */
 	AHBSC0->MISC_CTRL_REG = 0x000086aa;
-	AHBSC0->MISC_CTRL_DP_REG = 0x000086aa;
 
 	GlikeyWriteEnable(GLIKEY0, 7U);
 	/* Enable arbiter0 accessing SRAM */
@@ -575,14 +578,6 @@ static void BOARD_InitAHBSC(void)
 	AHBSC0->MEDIA_ARB0RAM_ACCESS_ENABLE = 0x3FFFFFFF;
 	AHBSC0->NPU_ARB0RAM_ACCESS_ENABLE = 0x3FFFFFFF;
 	AHBSC0->HIFI4_ARB0RAM_ACCESS_ENABLE = 0x3FFFFFFF;
-
-	GlikeyWriteEnable(GLIKEY0, 6U);
-	AHBSC0->MASTER_SEC_LEVEL        = 0x3;
-	AHBSC0->MASTER_SEC_ANTI_POL_REG = 0xFFC;
-
-	AHBSC0->APB_SLAVE_GROUP0_RULE0 = 0x00000000;
-	AHBSC0->AHB_PERIPHERAL0_SLAVE_RULE1 = 0x00000000;
-	AHBSC0->AIPS1_BRIDGE_GROUP0_MEM_RULE2 = 0x00000000;
 #endif
 
 	GlikeyWriteEnable(GLIKEY1, 1U);
@@ -629,4 +624,46 @@ static void edma_enable_all_request(uint8_t instance)
 		*reg |= 0xFFFFFFFF;
 	}
 }
+#endif
+
+#if defined(CONFIG_SECOND_CORE_MCUX) && defined(CONFIG_SOC_MIMXRT798S_CM33_CPU0)
+/**
+ * @brief Kickoff secondary core (CPU1).
+ *
+ * Kick the secondary core out of reset and wait for it to indicate boot. The
+ * core image was already copied to RAM in soc_early_init_hook()
+ *
+ * @return 0
+ */
+static int second_core_boot(void)
+{
+	/* Get the boot address for the second core */
+	uint32_t boot_address = (uint32_t)(DT_REG_ADDR(DT_NODELABEL(sram_code)));
+
+	PMC0->PDRUNCFG2 &= ~0x3FFC0000;
+	PMC0->PDRUNCFG3 &= ~0x3FFC0000;
+
+	/* RT700 specific CPU1 boot sequence */
+	/* Glikey write enable, GLIKEY4 */
+	GlikeyWriteEnable(GLIKEY4, 1U);
+
+	/* Boot source for Core 1 from RAM. */
+	SYSCON3->CPU1_NSVTOR = ((uint32_t)(void *)boot_address >> 7U);
+	SYSCON3->CPU1_SVTOR = ((uint32_t)(void *)boot_address >> 7U);
+
+	GlikeyClearConfig(GLIKEY4);
+
+	/* Enable cpu1 clock. */
+	CLOCK_EnableClock(kCLOCK_Cpu1);
+
+	/* Clear reset*/
+	RESET_ClearPeripheralReset(kCPU1_RST_SHIFT_RSTn);
+
+	/* Release cpu wait*/
+	SYSCON3->CPU_STATUS &= ~SYSCON3_CPU_STATUS_CPU_WAIT_MASK;
+
+	return 0;
+}
+
+SYS_INIT(second_core_boot, PRE_KERNEL_2, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);
 #endif

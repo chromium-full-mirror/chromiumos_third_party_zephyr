@@ -11,10 +11,15 @@ config SOC_SILABS_XG27
 	select CPU_HAS_FPU
 	select HAS_SWO
 	select SOC_GECKO_CMU
+	select SOC_GECKO_GPIO
 	select SOC_GECKO_CORE
 	select SOC_GECKO_DEV_INIT
+	select SOC_GECKO_EMU
 	select SOC_GECKO_SE
 	select HAS_PM
 
 config SOC_SERIES_EFR32BG27
+	select SOC_GECKO_HAS_RADIO
+
+config SOC_SERIES_EFR32MG27
 	select SOC_GECKO_HAS_RADIO

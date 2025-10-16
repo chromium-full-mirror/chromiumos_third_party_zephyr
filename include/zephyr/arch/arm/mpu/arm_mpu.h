@@ -10,8 +10,8 @@
 	defined(CONFIG_CPU_CORTEX_M4) || defined(CONFIG_CPU_CORTEX_M7) || defined(CONFIG_ARMV7_R)
 #include <zephyr/arch/arm/mpu/arm_mpu_v7m.h>
 #elif defined(CONFIG_CPU_CORTEX_M23) || defined(CONFIG_CPU_CORTEX_M33) ||                          \
-	defined(CONFIG_CPU_CORTEX_M55) || defined(CONFIG_CPU_CORTEX_M85) ||                        \
-	defined(CONFIG_AARCH32_ARMV8_R)
+	defined(CONFIG_CPU_CORTEX_M52) || defined(CONFIG_CPU_CORTEX_M55) ||                        \
+	defined(CONFIG_CPU_CORTEX_M85) || defined(CONFIG_AARCH32_ARMV8_R)
 #include <zephyr/arch/arm/mpu/arm_mpu_v8.h>
 #else
 #error "Unsupported ARM CPU"
@@ -25,7 +25,7 @@
 #define Z_ARM_CPU_HAS_PMSAV8_MPU 0
 #endif
 
-#if defined(CONFIG_ARMV8_M_MAINLINE)
+#if defined(CONFIG_ARMV7_M_ARMV8_M_MAINLINE) || defined(CONFIG_ARMV8_M_MAINLINE)
 #define Z_ARM_MPU_MAX_REGIONS 16U
 #else
 #define Z_ARM_MPU_MAX_REGIONS 8U
