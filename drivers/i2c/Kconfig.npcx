@@ -37,3 +37,9 @@ config I2C_NPCX_DMA_DRIVEN
 	help
 	  For I2C peripherals that support DMA mode, data transfers shall be performed
 	  using DMA‑driven transactions.
+
+config I2C_NPCX_INVALID_STOP_WORKAROUND
+	bool
+	default y
+	help
+	  Workaround for invalid STOP condition issue in NPCXn variant I2C controllers.
