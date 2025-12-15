@@ -13,6 +13,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/pm/policy.h>
 #include <errno.h>
+#include <ilm.h>
 #include <soc.h>
 #include <soc_dt.h>
 #include <zephyr/sys/util.h>
@@ -21,6 +22,12 @@
 LOG_MODULE_REGISTER(i2c_ite_enhance, CONFIG_I2C_LOG_LEVEL);
 
 #include "i2c-priv.h"
+
+#ifdef CONFIG_I2C_CODE_IN_RAM
+#define IT8XXX2_I2C_CODE_IN_RAM __soc_ram_code
+#else
+#define IT8XXX2_I2C_CODE_IN_RAM
+#endif
 
 /* Start smbus session from idle state */
 #define I2C_MSG_START BIT(5)
@@ -226,6 +233,7 @@ enum enhanced_i2c_target_status {
 };
 #endif
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int i2c_parsing_return_value(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -247,6 +255,7 @@ static int i2c_parsing_return_value(const struct device *dev)
 	}
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int i2c_get_line_levels(const struct device *dev)
 {
 	const struct i2c_enhance_config *config = dev->config;
@@ -264,6 +273,7 @@ static int i2c_get_line_levels(const struct device *dev)
 	return pin_sts;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int i2c_is_busy(const struct device *dev)
 {
 	const struct i2c_enhance_config *config = dev->config;
@@ -272,6 +282,7 @@ static int i2c_is_busy(const struct device *dev)
 	return (IT8XXX2_I2C_STR(base) & E_HOSTA_BB);
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int i2c_bus_not_available(const struct device *dev)
 {
 	if (i2c_is_busy(dev) ||
@@ -282,6 +293,7 @@ static int i2c_bus_not_available(const struct device *dev)
 	return 0;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void i2c_reset(const struct device *dev)
 {
 	const struct i2c_enhance_config *config = dev->config;
@@ -292,6 +304,7 @@ static void i2c_reset(const struct device *dev)
 }
 
 /* Set clock frequency for i2c port D, E , or F */
+IT8XXX2_I2C_CODE_IN_RAM
 static void i2c_enhanced_port_set_frequency(const struct device *dev,
 					    int freq_hz)
 {
@@ -394,6 +407,7 @@ static int i2c_enhance_get_config(const struct device *dev, uint32_t *dev_config
 	return 0;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int enhanced_i2c_error(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -415,6 +429,7 @@ static int enhanced_i2c_error(const struct device *dev)
 	return data->err;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void enhanced_i2c_start(const struct device *dev)
 {
 	const struct i2c_enhance_config *config = dev->config;
@@ -433,6 +448,7 @@ static void enhanced_i2c_start(const struct device *dev)
 	IT8XXX2_I2C_CTR1(base) = IT8XXX2_I2C_MDL_EN;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void i2c_pio_trans_data(const struct device *dev,
 			       enum enhanced_i2c_transfer_direct direct,
 			       uint16_t trans_data, int first_byte)
@@ -468,6 +484,7 @@ static void i2c_pio_trans_data(const struct device *dev,
 	}
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int enhanced_i2c_tran_read(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -525,6 +542,7 @@ static int enhanced_i2c_tran_read(const struct device *dev)
 	return 1;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int enhanced_i2c_tran_write(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -566,6 +584,7 @@ static int enhanced_i2c_tran_write(const struct device *dev)
 	return 1;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int i2c_transaction(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -597,6 +616,7 @@ static int i2c_transaction(const struct device *dev)
 	return 0;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int i2c_enhance_pio_transfer(const struct device *dev,
 				    struct i2c_msg *msgs)
 {
@@ -684,6 +704,7 @@ static void enhanced_i2c_set_cmd_addr_regs(const struct device *dev)
 	IT8XXX2_I2C_CMD_ADDL(base) = dlm_base & 0xff;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void enhanced_i2c_cq_write(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -702,6 +723,7 @@ static void enhanced_i2c_cq_write(const struct device *dev)
 	}
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void enhanced_i2c_cq_read(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -718,6 +740,7 @@ static void enhanced_i2c_cq_read(const struct device *dev)
 	i2c_cq_pckt->cmd_h = num_bit_10_3;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void enhanced_i2c_cq_write_to_read(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -744,6 +767,7 @@ static void enhanced_i2c_cq_write_to_read(const struct device *dev)
 	i2c_cq_pckt->wdata[i] = num_bit_10_3;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int enhanced_i2c_cq_isr(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -778,6 +802,7 @@ static int enhanced_i2c_cq_isr(const struct device *dev)
 	return 0;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int enhanced_i2c_cmd_queue_trans(const struct device *dev)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -822,6 +847,7 @@ static int enhanced_i2c_cmd_queue_trans(const struct device *dev)
 	return 1;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int i2c_enhance_cq_transfer(const struct device *dev,
 				   struct i2c_msg *msgs)
 {
@@ -857,6 +883,7 @@ static int i2c_enhance_cq_transfer(const struct device *dev,
 	return data->err;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static bool cq_mode_allowed(const struct device *dev, struct i2c_msg *msgs)
 {
 	struct i2c_enhance_data *data = dev->data;
@@ -927,6 +954,7 @@ static bool cq_mode_allowed(const struct device *dev, struct i2c_msg *msgs)
 }
 #endif /* CONFIG_I2C_IT8XXX2_CQ_MODE */
 
+IT8XXX2_I2C_CODE_IN_RAM
 static int i2c_enhance_transfer(const struct device *dev,
 				struct i2c_msg *msgs,
 				uint8_t num_msgs, uint16_t addr)
@@ -985,6 +1013,7 @@ static int i2c_enhance_transfer(const struct device *dev,
 
 #ifdef CONFIG_I2C_TARGET
 #ifdef CONFIG_I2C_TARGET_BUFFER_MODE
+IT8XXX2_I2C_CODE_IN_RAM
 static void target_i2c_isr_dma(const struct device *dev,
 			       uint8_t interrupt_status)
 {
@@ -1050,6 +1079,7 @@ static void target_i2c_isr_dma(const struct device *dev,
 }
 #endif /* CONFIG_I2C_TARGET_BUFFER_MODE */
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void target_i2c_isr_pio(const struct device *dev, uint8_t interrupt_status,
 			       uint8_t target_status)
 {
@@ -1112,6 +1142,7 @@ static void target_i2c_isr_pio(const struct device *dev, uint8_t interrupt_statu
 	IT8XXX2_I2C_CTR(base) |= IT8XXX2_I2C_HALT;
 }
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void target_i2c_isr(const struct device *dev)
 {
 	const struct i2c_enhance_config *config = dev->config;
@@ -1145,6 +1176,7 @@ static void target_i2c_isr(const struct device *dev)
 }
 #endif
 
+IT8XXX2_I2C_CODE_IN_RAM
 static void i2c_enhance_isr(void *arg)
 {
 	struct device *dev = (struct device *)arg;
