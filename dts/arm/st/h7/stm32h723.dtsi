@@ -5,7 +5,6 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <mem.h>
 #include <st/h7/stm32h7.dtsi>
 #include <zephyr/dt-bindings/display/panel.h>
 #include <zephyr/dt-bindings/flash_controller/ospi.h>
@@ -53,7 +52,7 @@
 				       STM32H72X_ADC3_RES(8, 0x02)
 				       STM32H72X_ADC3_RES(6, 0x03)>;
 			sampling-times = <3 7 13 25 48 93 248 641>;
-			st,adc-oversampler = "OVERSAMPLER_MINIMAL";
+			st,adc-oversampler = "minimal";
 			st,adc-internal-regulator = "startup-sw-delay";
 		};
 
@@ -231,20 +230,6 @@
 		reg = <0x38000000 DT_SIZE_K(16)>;
 		compatible = "zephyr,memory-region", "mmio-sram";
 		zephyr,memory-region = "SRAM4";
-	};
-
-	/* Data TCM RAM */
-	dtcm: memory@20000000 {
-		compatible = "zephyr,memory-region", "arm,dtcm";
-		reg = <0x20000000 DT_SIZE_K(128)>;
-		zephyr,memory-region = "DTCM";
-	};
-
-	/* Instruction TCM RAM (64KB as `TCM_AXI_SHARED` is `000`) */
-	itcm: memory@0 {
-		compatible = "zephyr,memory-region", "arm,itcm";
-		reg = <0x00000000 DT_SIZE_K(64)>;
-		zephyr,memory-region = "ITCM";
 	};
 
 	otghs_fs_phy: otghs_fs_phy {

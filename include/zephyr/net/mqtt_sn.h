@@ -230,8 +230,8 @@ struct mqtt_sn_transport_udp {
 	int sock;
 
 	/** Address of broadcasts */
-	struct sockaddr bcaddr;
-	socklen_t bcaddrlen;
+	struct net_sockaddr bcaddr;
+	net_socklen_t bcaddrlen;
 };
 
 #define UDP_TRANSPORT(transport) CONTAINER_OF(transport, struct mqtt_sn_transport_udp, tp)
@@ -243,8 +243,8 @@ struct mqtt_sn_transport_udp {
  * @param[in] gwaddr Pre-initialized gateway address
  * @param[in] addrlen Size of the gwaddr structure.
  */
-int mqtt_sn_transport_udp_init(struct mqtt_sn_transport_udp *udp, struct sockaddr *gwaddr,
-			       socklen_t addrlen);
+int mqtt_sn_transport_udp_init(struct mqtt_sn_transport_udp *udp, struct net_sockaddr *gwaddr,
+			       net_socklen_t addrlen);
 #endif
 
 /**
@@ -487,10 +487,10 @@ int mqtt_sn_get_topic_name(struct mqtt_sn_client *client, uint16_t id,
 /**
  * @brief Predefine topic.
  *
- * Has to be called after mqtt_sn_connect, if a clear session is started. Otherwise, the clearing
- * will also remove all predefined topics. Additionally, it has to be called before calling
- * mqtt_sn_input for the first time after the connect, to prevent race conditions where incoming
- * publications use predefined topics which were not defined, yet.
+ * Can be called before mqtt_sn_connect, because predefined topics are never cleared. If you call it
+ * afterwards, it has to be called before calling mqtt_sn_input for the first time after the
+ * connect, to prevent race conditions where incoming publications use predefined topics which were
+ * not defined, yet.
  *
  * @param[in] client The MQTT-SN client to define the topic on.
  * @param[in] topic_id Topic identifier.
@@ -500,6 +500,18 @@ int mqtt_sn_get_topic_name(struct mqtt_sn_client *client, uint16_t id,
  */
 int mqtt_sn_predefine_topic(struct mqtt_sn_client *client, uint16_t topic_id,
 			    struct mqtt_sn_data *topic_name);
+
+/**
+ * @brief Define a short topic.
+ *
+ * Can be called before mqtt_sn_connect, because short topics are never cleared.
+ *
+ * @param[in] client The MQTT-SN client to define the topic on.
+ * @param[in] topic_name The name of the topic. Must be exactly 2 bytes long.
+ *
+ * @return 0 or a negative error code (errno.h) indicating reason of failure.
+ */
+int mqtt_sn_define_short_topic(struct mqtt_sn_client *client, struct mqtt_sn_data *topic_name);
 
 /**
  * @brief Send a will topic update to the server.

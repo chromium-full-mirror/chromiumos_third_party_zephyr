@@ -93,7 +93,7 @@ kernel_sources_ifdef(CONFIG_MULTITHREADING
   )
 
 if(CONFIG_MULTITHREADING)
-if (CONFIG_SCHED_SCALABLE OR CONFIG_WAITQ_SCALABLE)
+if(CONFIG_SCHED_SCALABLE OR CONFIG_WAITQ_SCALABLE)
 kernel_sources(priority_queues.c)
 endif()
 
@@ -193,6 +193,11 @@ target_include_directories(kernel PRIVATE
 
 target_link_libraries(kernel zephyr_interface)
 
+endif()
+
+# Optionally build kernel sources without LTO
+if(CONFIG_KERNEL_NO_LTO)
+  include(${CMAKE_CURRENT_LIST_DIR}/kernel_no_lto.cmake)
 endif()
 
 add_dependencies(kernel zephyr_generated_headers)

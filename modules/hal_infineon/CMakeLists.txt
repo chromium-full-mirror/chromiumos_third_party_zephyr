@@ -5,7 +5,8 @@
 if(CONFIG_HAS_XMCLIB
   OR CONFIG_SOC_FAMILY_PSOC6_LEGACY
   OR CONFIG_SOC_FAMILY_INFINEON_CAT1
-  OR CONFIG_SOC_FAMILY_INFINEON_EDGE)
+  OR CONFIG_SOC_FAMILY_INFINEON_EDGE
+  OR CONFIG_SOC_FAMILY_INFINEON_PSOC4)
 
   zephyr_library_named(modules_hal_infineon)
   zephyr_library_compile_options($<TARGET_PROPERTY:compiler,warning_no_array_bounds>)
@@ -70,9 +71,18 @@ if(CONFIG_SOC_FAMILY_INFINEON_EDGE)
   add_subdirectory(mtb-dsl-pse8xxgp)
 endif()
 
+if(CONFIG_SOC_FAMILY_INFINEON_CAT1C)
+  zephyr_library_compile_definitions_ifdef(CONFIG_SOC_XMC7200_CORE_NAME_M7_0 CORE_NAME_CM7_0)
+  zephyr_library_compile_definitions_ifdef(CONFIG_SOC_XMC7200_CORE_NAME_M7_1 CORE_NAME_CM7_1)
+endif()
+
+if(CONFIG_SOC_SERIES_PSC3)
+  add_subdirectory(zephyr-ifx-cycfg)
+endif()
+
 ## Add Wi-Fi assets for AIROC devices
 if(CONFIG_WIFI_AIROC)
-  add_subdirectory(wifi-host-driver)
+  add_subdirectory(whd-expansion)
 
   ## Add core-lib sources for CAT1 devices
   add_subdirectory_ifndef(CONFIG_SOC_FAMILY_INFINEON_CAT1 core-lib)
@@ -88,4 +98,18 @@ endif()
 
 if(CONFIG_BT_PSOC6_BLESS)
   add_subdirectory(bless)
+endif()
+
+if(CONFIG_SOC_FAMILY_INFINEON_PSOC4)
+  ## Add core-lib sources for PSCO4 devices
+  add_subdirectory(core-lib)
+
+  ## Add mtb-pdl-cat2 sources for PSCO4 devices
+  add_subdirectory(mtb-pdl-cat2)
+
+  ## Add mtb-template-cat2 sources for PSCO4 devices
+  add_subdirectory(mtb-template-cat2)
+
+  ## Add abstraction-rtos sources
+  add_subdirectory(abstraction-rtos)
 endif()
