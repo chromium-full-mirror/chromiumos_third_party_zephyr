@@ -50,7 +50,7 @@ tests:
       - rd_rw612_bga
       - esp32_devkitc/esp32/procpu
       - esp32s2_saola
-      - esp32s3_devkitm/esp32s3/procpu
+      - esp32s3_devkitc/esp32s3/procpu
       - esp32c3_devkitm
       - esp32c6_devkitc/esp32c6/hpcore
       - esp8684_devkitm
@@ -70,6 +70,7 @@ tests:
       - nucleo_wba65ri
       - nucleo_wl55jc
       - stm32f3_disco
+      - stm32l562e_dk
       - stm32u083c_dk
       - stm32wba65i_dk1
     integration_platforms:
