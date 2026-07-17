@@ -1032,13 +1032,31 @@ static inline int work_handler_out(const struct device *dev, uint8_t ep)
 		/* Update to next stage of control transfer */
 		udc_ctrl_update_stage(dev, buf);
 
-		if (udc_ctrl_stage_is_status_in(dev)) {
-			it82xx2_usb_set_ep_ctrl(dev, ep, EP_DATA_SEQ_1, true);
-			err = udc_ctrl_submit_s_out_status(dev, buf);
-		}
-	} else {
-		err = udc_submit_ep_event(dev, buf, 0);
+	LOG_DBG("Handle data OUT, %zu | %zu", len, net_buf_tailroom(buf));
+
+	if (ep != USB_CONTROL_EP_OUT) {
+		atomic_clear_bit(&priv->out_fifo_state, IT82xx2_STATE_OUT_SHARED_FIFO_BUSY);
 	}
+
+	udc_ep_set_busy(ep_cfg, false);
+
+	if (net_buf_tailroom(buf) && len == udc_mps_ep_size(ep_cfg)) {
+		/* For non-control endpoints, the next out transfer will be started outside
+		 * this function. Do nothing here to avoid triggering it twice.
+		 */
+		if (ep == USB_CONTROL_EP_OUT) {
+			work_handler_xfer_continue(dev, ep, buf);
+		}
+
+		return 0;
+	}
+
+	buf = udc_buf_get(ep_cfg);
+	if (buf == NULL) {
+		return -ENODATA;
+	}
+
+	err = udc_submit_ep_event(dev, buf, 0);
 
 	return err;
 }
