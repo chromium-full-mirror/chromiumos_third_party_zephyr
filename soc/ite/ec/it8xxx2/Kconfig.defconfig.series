@@ -34,7 +34,8 @@ config PINCTRL
 	default y
 
 config NUM_IRQS
-	default 185
+	default 221 if SOC_IT82000BW
+	default 186
 
 config DYNAMIC_INTERRUPTS
 	default y

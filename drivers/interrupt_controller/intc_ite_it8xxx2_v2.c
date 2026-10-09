@@ -79,7 +79,7 @@ void ite_intc_isr_clear(unsigned int irq)
 {
 	uint32_t group, index;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return;
 	}
 
@@ -93,7 +93,7 @@ void __soc_ram_code ite_intc_irq_enable(unsigned int irq)
 {
 	uint32_t group, index;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return;
 	}
 
@@ -112,7 +112,7 @@ void __soc_ram_code ite_intc_irq_disable(unsigned int irq)
 {
 	uint32_t group, index;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return;
 	}
 
@@ -136,7 +136,7 @@ void ite_intc_irq_polarity_set(unsigned int irq, unsigned int flags)
 {
 	uint32_t group, index;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return;
 	}
 
@@ -164,7 +164,7 @@ int __soc_ram_code ite_intc_irq_is_enable(unsigned int irq)
 {
 	uint32_t group, index;
 
-	if (irq > CONFIG_NUM_IRQS) {
+	if (irq >= CONFIG_NUM_IRQS) {
 		return 0;
 	}
 
