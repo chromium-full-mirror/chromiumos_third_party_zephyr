@@ -313,20 +313,20 @@ void riscv_idle(enum chip_pll_mode mode, unsigned int key)
 	/* Chip doze after wfi instruction */
 	chip_pll_ctrl(mode);
 
-#if defined(CONFIG_I2C_ITE_ENHANCE) && defined(CONFIG_I2C_TARGET_BUFFER_MODE)
-	/* If the event timer or free-run timer is close to expiration when system
-	 * enters idle with I2C target DMA mode enabled, the memory and CPU clocks
-	 * may become unsynchronized after wakeup. This causes CPU to fetch incorrect
-	 * data and eventually trigger SoC watchdog timeout.
-	 * Due to this hardware limitation, SoC should skip entering idle mode if
-	 * the remaining timer value is less than 150µs(safe margin).
-	 */
-	if (ite_ec_timer_block_idle()) {
-		goto __no_idle;
-	}
-#endif /* defined(CONFIG_I2C_ITE_ENHANCE) && defined(CONFIG_I2C_TARGET_BUFFER_MODE) */
-
 	do {
+		/* If the event timer or free-run timer is close to expiration when system
+		 * enters idle with I2C target DMA mode enabled, the memory and CPU clocks
+		 * may become unsynchronized after wakeup. This causes CPU to fetch incorrect
+		 * data and eventually trigger SoC watchdog timeout.
+		 * Due to this hardware limitation, SoC should skip entering idle mode if
+		 * the remaining timer value is less than 150µs(safe margin).
+		 */
+		if (IS_ENABLED(CONFIG_I2C_ITE_ENHANCE) &&
+		    IS_ENABLED(CONFIG_I2C_TARGET_BUFFER_MODE) &&
+		    ite_ec_timer_block_idle()) {
+			break;
+		}
+
 #ifndef CONFIG_SOC_IT8XXX2_JTAG_DEBUG_INTERFACE
 		/* Wait for interrupt */
 		__asm__ volatile ("wfi");
@@ -340,10 +340,6 @@ void riscv_idle(enum chip_pll_mode mode, unsigned int key)
 		 * wfi success.
 		 */
 	} while (ite_intc_no_irq());
-
-#if defined(CONFIG_I2C_ITE_ENHANCE) && defined(CONFIG_I2C_TARGET_BUFFER_MODE)
-__no_idle:
-#endif /* defined(CONFIG_I2C_ITE_ENHANCE) && defined(CONFIG_I2C_TARGET_BUFFER_MODE) */
 	if (IS_ENABLED(CONFIG_SOC_IT8XXX2_LCVCO)) {
 		if (mode != CHIP_PLL_DOZE) {
 			IT8XXX2_ECPM_PFACC2R |= PLL_FREQ_AUTO_CAL_START;
