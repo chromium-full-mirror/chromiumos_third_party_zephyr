@@ -267,10 +267,11 @@ void sys_clock_set_timeout(int32_t ticks, bool idle)
 		next_cycs = (last_ticks + last_elapsed + ticks) * HW_CNT_PER_SYS_TICK;
 		now = ~(IT8XXX2_EXT_CNTOX(FREE_RUN_TIMER));
 		if (unlikely((int32_t)(next_cycs - now) <= 0)) {
-			hw_cnt = 1;
+			hw_cnt = IDLE_BLOCK_TIMER_TICKS;
 		} else {
 			dcycles = next_cycs - now;
-			hw_cnt = MIN(dcycles, EVENT_TIMER_MAX_CNT);
+			hw_cnt = CLAMP(dcycles, IDLE_BLOCK_TIMER_TICKS,
+				       EVENT_TIMER_MAX_CNT);
 		}
 	}
 
